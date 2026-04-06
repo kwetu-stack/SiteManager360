@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Documents • SiteManager360{% endblock %}
+{% block content %}
+<h1>Documents</h1>
+<p>Placeholder: document management coming soon.</p>
+<ul>
+  {% for d in docs %}
+    <li>#{{ d.id }} — {{ d.title }}</li>
+  {% endfor %}
+</ul>
+{% endblock %}

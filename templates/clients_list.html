@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Client • SiteManager360{% endblock %}
+{% block content %}
+<h1>Client</h1>
+<div class="actions"><a class="btn" href="{{ url_for('clients_new') }}">+ New</a></div>
+<table class="table">
+  <thead><tr><th>Name</th><th>Contact Person</th><th>Phone</th><th>Email</th><th>Address</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for item in items %}
+    <tr>
+      <td>{{ item.name }}</td><td>{{ item.contact_person }}</td><td>{{ item.phone }}</td><td>{{ item.email }}</td><td>{{ item.address }}</td>
+      <td class="actions">
+        <a class="btn" href="{{ url_for('clients_edit', id=item.id) }}">Edit</a>
+        {% if demo_mode %}
+          <button class="btn danger" type="button" disabled title="Disabled in demo">Delete</button>
+        {% else %}
+          <form method="post" action="{{ url_for('clients_delete', id=item.id) }}" onsubmit="return confirm('Delete?');" style="display:inline">
+            <button class="btn danger" type="submit">Delete</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

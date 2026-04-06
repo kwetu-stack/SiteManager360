@@ -1,0 +1,858 @@
+import os
+from datetime import datetime, date
+from functools import wraps
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, session
+from flask_sqlalchemy import SQLAlchemy
+from flask_sqlalchemy.session import Session as FlaskSQLAlchemySession
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DEMO_MODE = True
+DEMO_WRITE_BYPASS = False
+
+
+def is_demo():
+    return DEMO_MODE
+
+
+def demo_persistence_enabled():
+    return not is_demo() or DEMO_WRITE_BYPASS
+
+
+class DemoSession(FlaskSQLAlchemySession):
+    def commit(self):
+        if demo_persistence_enabled():
+            super().commit()
+
+
+class DemoSQLAlchemy(SQLAlchemy):
+    def __init__(self, *args, **kwargs):
+        session_options = dict(kwargs.pop("session_options", {}))
+        session_options.setdefault("class_", DemoSession)
+        super().__init__(*args, session_options=session_options, **kwargs)
+
+
+app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
+app.url_map.strict_slashes = False
+
+# -------------------- DATABASE CONFIG (Windows-safe) --------------------
+database_url = os.getenv("DATABASE_URL", "").strip()
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+if database_url:
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+else:
+    base_dir = os.path.abspath(os.path.dirname(__file__))
+    win_local = os.environ.get("LOCALAPPDATA")
+    if win_local:
+        data_dir = os.path.join(win_local, "SiteManager360", "data")
+    else:
+        data_dir = os.path.join(base_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    sqlite_path = os.path.join(data_dir, "sitemanager360.db").replace("\\", "/")
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{sqlite_path}"
+
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["DEBUG"] = False
+
+db = DemoSQLAlchemy(app)
+
+# -------------------- MODELS --------------------
+class Client(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    contact_person = db.Column(db.String(120))
+    phone = db.Column(db.String(50))
+    email = db.Column(db.String(120))
+    address = db.Column(db.String(250))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    projects = db.relationship("Project", backref="client", lazy=True)
+
+class Project(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey("client.id"), nullable=False)
+    budget = db.Column(db.Float, default=0.0)
+    start_date = db.Column(db.Date)
+    end_date = db.Column(db.Date)
+    status = db.Column(db.String(50), default="Planned")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    sites = db.relationship("Site", backref="project", lazy=True)
+
+class Worker(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    role = db.Column(db.String(120))
+    phone = db.Column(db.String(50))
+    assigned_site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)
+    hired_date = db.Column(db.Date)
+
+class Site(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    name = db.Column(db.String(150), nullable=False)
+    location = db.Column(db.String(150))
+    manager_id = db.Column(db.Integer, db.ForeignKey("worker.id"), nullable=True)
+    start_date = db.Column(db.Date)
+    end_date = db.Column(db.Date)
+    status = db.Column(db.String(50), default="Active")
+    manager = db.relationship("Worker", foreign_keys=[manager_id], uselist=False)
+
+class Supplier(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    phone = db.Column(db.String(50))
+    email = db.Column(db.String(120))
+    category = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    materials = db.relationship("Material", backref="supplier", lazy=True)
+
+class Material(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey("supplier.id"), nullable=False)
+    name = db.Column(db.String(150), nullable=False)
+    unit = db.Column(db.String(50), default="pcs")
+    cost_per_unit = db.Column(db.Float, default=0.0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SiteMaterial(db.Model):  # Deliveries
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=False)
+    material_id = db.Column(db.Integer, db.ForeignKey("material.id"), nullable=False)
+    quantity = db.Column(db.Float, default=0.0)
+    delivery_date = db.Column(db.Date)
+    site = db.relationship("Site", backref="deliveries", lazy=True)
+    material = db.relationship("Material", backref="deliveries", lazy=True)
+
+class Equipment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    type = db.Column(db.String(120))
+    purchase_date = db.Column(db.Date)
+    status = db.Column(db.String(50), default="Available")
+    assigned_site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)
+    assigned_site = db.relationship("Site", foreign_keys=[assigned_site_id], uselist=False)
+
+class Task(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=False)
+    description = db.Column(db.String(250), nullable=False)
+    status = db.Column(db.String(50), default="Open")
+    assigned_to = db.Column(db.Integer, db.ForeignKey("worker.id"), nullable=True)
+    deadline = db.Column(db.Date)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    site = db.relationship("Site", backref="tasks", lazy=True)
+    worker = db.relationship("Worker", foreign_keys=[assigned_to], uselist=False)
+
+class Expense(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=False)
+    category = db.Column(db.String(120), nullable=False)
+    amount = db.Column(db.Float, default=0.0)
+    supplier_id = db.Column(db.Integer, db.ForeignKey("supplier.id"), nullable=True)
+    date = db.Column(db.Date, default=date.today)
+    note = db.Column(db.String(250))
+    site = db.relationship("Site", backref="expenses", lazy=True)
+    supplier = db.relationship("Supplier", foreign_keys=[supplier_id], uselist=False)
+
+class Document(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(150), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+def set_password(pw):
+    import hashlib, os, binascii
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, 100000)
+    return binascii.hexlify(salt).decode() + ":" + binascii.hexlify(dk).decode()
+
+def check_password(hashval, pw):
+    import binascii, hashlib
+    salt_hex, dk_hex = hashval.split(":")
+    salt = binascii.unhexlify(salt_hex.encode())
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, 100000)
+    return binascii.hexlify(dk).decode() == dk_hex
+
+# -------------------- HELPERS --------------------
+def parse_date(field):
+    val = request.form.get(field) or ""
+    try:
+        return datetime.strptime(val, "%Y-%m-%d").date() if val else None
+    except ValueError:
+        return None
+
+def commit_session():
+    if demo_persistence_enabled():
+        db.session.commit()
+
+def seed_data():
+    global DEMO_WRITE_BYPASS
+    previous_bypass = DEMO_WRITE_BYPASS
+    DEMO_WRITE_BYPASS = True
+    try:
+        # Seed admin user
+        if not User.query.filter(db.func.lower(User.email)=="user.admin@sitemanager.local").first():
+            admin = User(email="user.admin@sitemanager.local", password_hash=set_password("kwetutech002"))
+            db.session.add(admin)
+
+        if Client.query.first():
+            commit_session()
+            return
+
+        # Clients
+        c1 = Client(name="Nairobi Properties Ltd", contact_person="Jane W.", phone="+254700111222",
+                    email="jane@npl.co.ke", address="Kilimani, Nairobi")
+        c2 = Client(name="Eastlands Developers", contact_person="Peter K.", phone="+254700222333",
+                    email="peter@edl.co.ke", address="Industrial Area, Nairobi")
+        db.session.add_all([c1, c2]); db.session.flush()
+
+        # Workers
+        w1 = Worker(name="Eric Kimani", role="Site Manager", phone="+254711000111", hired_date=date(2023,1,12))
+        w2 = Worker(name="Lydia W.", role="Engineer", phone="+254722000222", hired_date=date(2023,3,5))
+        w3 = Worker(name="Joseph N.", role="Foreman", phone="+254733000333", hired_date=date(2024,5,1))
+        db.session.add_all([w1, w2, w3]); db.session.flush()
+
+        # Projects
+        p1 = Project(name="Westlands Office Tower", client_id=c1.id, budget=120000000.0,
+                     start_date=date(2024,1,15), end_date=date(2025,12,30), status="Active")
+        p2 = Project(name="Thika Road Housing", client_id=c2.id, budget=80000000.0,
+                     start_date=date(2024,6,1), end_date=date(2026,3,1), status="Planned")
+        db.session.add_all([p1, p2]); db.session.flush()
+
+        # Sites
+        s1 = Site(project_id=p1.id, name="Westlands Main Site", location="Westlands, Nairobi",
+                  manager_id=w1.id, start_date=date(2024,1,20), status="Active")
+        s2 = Site(project_id=p1.id, name="Annex Site", location="Riverside, Nairobi",
+                  manager_id=w2.id, start_date=date(2024,2,5), status="Active")
+        s3 = Site(project_id=p2.id, name="Block A", location="Thika Road, Nairobi",
+                  manager_id=w3.id, start_date=date(2024,7,1), status="Planned")
+        db.session.add_all([s1, s2, s3]); db.session.flush()
+
+        # Suppliers & Materials
+        sup1 = Supplier(name="BuildMart Ltd", phone="+254701111111", email="sales@buildmart.co.ke", category="Cement & Steel")
+        sup2 = Supplier(name="MegaTools KE", phone="+254702222222", email="info@megatools.co.ke", category="Tools & Equipment")
+        db.session.add_all([sup1, sup2]); db.session.flush()
+
+        m1 = Material(supplier_id=sup1.id, name="Portland Cement 50kg", unit="bag", cost_per_unit=850.0)
+        m2 = Material(supplier_id=sup1.id, name="Rebar Steel 12mm", unit="bar", cost_per_unit=1200.0)
+        m3 = Material(supplier_id=sup2.id, name="Safety Helmet", unit="pcs", cost_per_unit=950.0)
+        db.session.add_all([m1, m2, m3]); db.session.flush()
+
+        # Deliveries
+        d1 = SiteMaterial(site_id=s1.id, material_id=m1.id, quantity=200, delivery_date=date(2024,2,10))
+        d2 = SiteMaterial(site_id=s1.id, material_id=m2.id, quantity=120, delivery_date=date(2024,2,12))
+        db.session.add_all([d1, d2])
+
+        # Equipment
+        e1 = Equipment(name="CAT 320D Excavator", type="Excavator", purchase_date=date(2022,9,15), status="In Use", assigned_site_id=s1.id)
+        e2 = Equipment(name="JCB Backhoe", type="Backhoe", purchase_date=date(2021,5,18), status="Available")
+        db.session.add_all([e1, e2])
+
+        # Tasks
+        t1 = Task(site_id=s1.id, description="Excavation for foundation", status="In_Progress", assigned_to=w3.id, deadline=date(2024,3,15))
+        t2 = Task(site_id=s2.id, description="Install temporary fencing", status="Open", assigned_to=w2.id, deadline=date(2024,3,1))
+        db.session.add_all([t1, t2])
+
+        # Expenses
+        ex1 = Expense(site_id=s1.id, category="Fuel", amount=45000.0, supplier_id=None, date=date(2024,2,14), note="Excavator fuel")
+        ex2 = Expense(site_id=s1.id, category="Materials", amount=170000.0, supplier_id=sup1.id, date=date(2024,2,12), note="Cement & steel")
+        db.session.add_all([ex1, ex2])
+
+        # Docs
+        doc = Document(title="Safety Compliance Checklist")
+        db.session.add(doc)
+
+        commit_session()
+    finally:
+        DEMO_WRITE_BYPASS = previous_bypass
+
+# -------------------- AUTH --------------------
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if is_demo():
+            demo_user = User.query.order_by(User.id.asc()).first()
+            if demo_user and not session.get("user_id"):
+                session["user_id"] = demo_user.id
+        if not session.get("user_id"):
+            return redirect(url_for("login", next=request.path))
+        return view_func(*args, **kwargs)
+    return wrapped
+
+@app.context_processor
+def inject_demo_mode():
+    return {"demo_mode": is_demo()}
+
+@app.before_request
+def block_post_in_demo():
+    if is_demo():
+        demo_user = User.query.order_by(User.id.asc()).first()
+        if demo_user and not session.get("user_id") and request.endpoint != "static":
+            session["user_id"] = demo_user.id
+        if request.method == "POST":
+            flash("Demo Mode: Action simulated successfully.", "info")
+            return redirect(request.referrer or url_for("dashboard"))
+
+@app.route("/login", methods=["GET","POST"])
+def login():
+    if is_demo():
+        demo_user = User.query.order_by(User.id.asc()).first()
+        if demo_user:
+            session["user_id"] = demo_user.id
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        password = request.form.get("password") or ""
+        user = User.query.filter(db.func.lower(User.email)==email).first()
+        if user and check_password(user.password_hash, password):
+            session["user_id"] = user.id
+            flash("Welcome back.", "success")
+            return redirect(request.args.get("next") or url_for("dashboard"))
+        flash("Invalid credentials.", "warning")
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    if is_demo():
+        flash("Demo Mode stays signed in for showcase access.", "info")
+        return redirect(url_for("dashboard"))
+    session.pop("user_id", None)
+    flash("Signed out.", "info")
+    return redirect(url_for("login"))
+
+# -------------------- BASIC --------------------
+@app.route("/health")
+def health():
+    return "OK", 200
+
+@app.route("/")
+@login_required
+def dashboard():
+    project_count = db.session.scalar(db.select(db.func.count(Project.id))) or 0
+    site_count = db.session.scalar(db.select(db.func.count(Site.id))) or 0
+    worker_count = db.session.scalar(db.select(db.func.count(Worker.id))) or 0
+    open_tasks = db.session.scalar(db.select(db.func.count(Task.id)).where(Task.status != "Done")) or 0
+    return render_template("dashboard.html",
+                           project_count=project_count,
+                           site_count=site_count,
+                           worker_count=worker_count,
+                           open_tasks=open_tasks)
+
+# -------------------- CLIENTS --------------------
+@app.route("/clients")
+@login_required
+def clients():
+    items = Client.query.order_by(Client.created_at.desc()).all()
+    return render_template("clients_list.html", items=items)
+
+@app.route("/clients/new", methods=["GET","POST"])
+@login_required
+def clients_new():
+    if request.method == "POST":
+        c = Client(
+            name=request.form["name"],
+            contact_person=request.form.get("contact_person"),
+            phone=request.form.get("phone"),
+            email=request.form.get("email"),
+            address=request.form.get("address"),
+        )
+        db.session.add(c); commit_session()
+        flash("Client created", "success")
+        return redirect(url_for("clients"))
+    return render_template("clients_form.html", item=None)
+
+@app.route("/clients/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def clients_edit(id):
+    item = Client.query.get_or_404(id)
+    if request.method == "POST":
+        item.name = request.form["name"]
+        item.contact_person = request.form.get("contact_person")
+        item.phone = request.form.get("phone")
+        item.email = request.form.get("email")
+        item.address = request.form.get("address")
+        commit_session()
+        flash("Client updated", "success")
+        return redirect(url_for("clients"))
+    return render_template("clients_form.html", item=item)
+
+@app.route("/clients/<int:id>/delete", methods=["POST"])
+@login_required
+def clients_delete(id):
+    item = Client.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Client deleted", "info")
+    return redirect(url_for("clients"))
+
+# -------------------- PROJECTS --------------------
+@app.route("/projects")
+@login_required
+def projects():
+    items = Project.query.order_by(Project.created_at.desc()).all()
+    return render_template("projects_list.html", items=items, clients=Client.query.all())
+
+@app.route("/projects/new", methods=["GET","POST"])
+@login_required
+def projects_new():
+    clients = Client.query.all()
+    if request.method == "POST":
+        p = Project(
+            name=request.form["name"],
+            client_id=int(request.form["client_id"]),
+            budget=float(request.form.get("budget") or 0),
+            start_date=parse_date("start_date"),
+            end_date=parse_date("end_date"),
+            status=request.form.get("status") or "Planned"
+        )
+        db.session.add(p); commit_session()
+        flash("Project created", "success")
+        return redirect(url_for("projects"))
+    return render_template("projects_form.html", item=None, clients=clients)
+
+@app.route("/projects/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def projects_edit(id):
+    item = Project.query.get_or_404(id)
+    clients = Client.query.all()
+    if request.method == "POST":
+        item.name = request.form["name"]
+        item.client_id = int(request.form["client_id"])
+        item.budget = float(request.form.get("budget") or 0)
+        item.start_date = parse_date("start_date")
+        item.end_date = parse_date("end_date")
+        item.status = request.form.get("status") or "Planned"
+        commit_session()
+        flash("Project updated", "success")
+        return redirect(url_for("projects"))
+    return render_template("projects_form.html", item=item, clients=clients)
+
+@app.route("/projects/<int:id>/delete", methods=["POST"])
+@login_required
+def projects_delete(id):
+    item = Project.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Project deleted", "info")
+    return redirect(url_for("projects"))
+
+# -------------------- SITES --------------------
+@app.route("/sites")
+@login_required
+def sites():
+    items = Site.query.order_by(Site.id.desc()).all()
+    return render_template("sites_list.html", items=items, projects=Project.query.all(), workers=Worker.query.all())
+
+@app.route("/sites/new", methods=["GET","POST"])
+@login_required
+def sites_new():
+    projects = Project.query.all()
+    workers = Worker.query.all()
+    if request.method == "POST":
+        s = Site(
+            project_id=int(request.form["project_id"]),
+            name=request.form["name"],
+            location=request.form.get("location"),
+            manager_id=int(request.form["manager_id"]) if request.form.get("manager_id") else None,
+            start_date=parse_date("start_date"),
+            end_date=parse_date("end_date"),
+            status=request.form.get("status") or "Active",
+        )
+        db.session.add(s); commit_session()
+        flash("Site created", "success")
+        return redirect(url_for("sites"))
+    return render_template("sites_form.html", item=None, projects=projects, workers=workers)
+
+@app.route("/sites/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def sites_edit(id):
+    item = Site.query.get_or_404(id)
+    projects = Project.query.all()
+    workers = Worker.query.all()
+    if request.method == "POST":
+        item.project_id = int(request.form["project_id"])
+        item.name = request.form["name"]
+        item.location = request.form.get("location")
+        item.manager_id = int(request.form["manager_id"]) if request.form.get("manager_id") else None
+        item.start_date = parse_date("start_date")
+        item.end_date = parse_date("end_date")
+        item.status = request.form.get("status") or "Active"
+        commit_session()
+        flash("Site updated", "success")
+        return redirect(url_for("sites"))
+    return render_template("sites_form.html", item=item, projects=projects, workers=workers)
+
+@app.route("/sites/<int:id>/delete", methods=["POST"])
+@login_required
+def sites_delete(id):
+    item = Site.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Site deleted", "info")
+    return redirect(url_for("sites"))
+
+# -------------------- SUPPLIERS --------------------
+@app.route("/suppliers")
+@login_required
+def suppliers():
+    items = Supplier.query.order_by(Supplier.created_at.desc()).all()
+    return render_template("suppliers_list.html", items=items)
+
+@app.route("/suppliers/new", methods=["GET","POST"])
+@login_required
+def suppliers_new():
+    if request.method == "POST":
+        s = Supplier(
+            name=request.form["name"],
+            phone=request.form.get("phone"),
+            email=request.form.get("email"),
+            category=request.form.get("category"),
+        )
+        db.session.add(s); commit_session()
+        flash("Supplier created", "success")
+        return redirect(url_for("suppliers"))
+    return render_template("suppliers_form.html", item=None)
+
+@app.route("/suppliers/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def suppliers_edit(id):
+    item = Supplier.query.get_or_404(id)
+    if request.method == "POST":
+        item.name = request.form["name"]
+        item.phone = request.form.get("phone")
+        item.email = request.form.get("email")
+        item.category = request.form.get("category")
+        commit_session()
+        flash("Supplier updated", "success")
+        return redirect(url_for("suppliers"))
+    return render_template("suppliers_form.html", item=item)
+
+@app.route("/suppliers/<int:id>/delete", methods=["POST"])
+@login_required
+def suppliers_delete(id):
+    item = Supplier.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Supplier deleted", "info")
+    return redirect(url_for("suppliers"))
+
+# -------------------- MATERIALS --------------------
+@app.route("/materials")
+@login_required
+def materials():
+    items = Material.query.order_by(Material.created_at.desc()).all()
+    return render_template("materials_list.html", items=items, suppliers=Supplier.query.all())
+
+@app.route("/materials/new", methods=["GET","POST"])
+@login_required
+def materials_new():
+    suppliers = Supplier.query.all()
+    if request.method == "POST":
+        m = Material(
+            supplier_id=int(request.form["supplier_id"]),
+            name=request.form["name"],
+            unit=request.form.get("unit") or "pcs",
+            cost_per_unit=float(request.form.get("cost_per_unit") or 0),
+        )
+        db.session.add(m); commit_session()
+        flash("Material created", "success")
+        return redirect(url_for("materials"))
+    return render_template("materials_form.html", item=None, suppliers=suppliers)
+
+@app.route("/materials/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def materials_edit(id):
+    item = Material.query.get_or_404(id)
+    suppliers = Supplier.query.all()
+    if request.method == "POST":
+        item.supplier_id = int(request.form["supplier_id"])
+        item.name = request.form["name"]
+        item.unit = request.form.get("unit") or "pcs"
+        item.cost_per_unit = float(request.form.get("cost_per_unit") or 0)
+        commit_session()
+        flash("Material updated", "success")
+        return redirect(url_for("materials"))
+    return render_template("materials_form.html", item=item, suppliers=suppliers)
+
+@app.route("/materials/<int:id>/delete", methods=["POST"])
+@login_required
+def materials_delete(id):
+    item = Material.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Material deleted", "info")
+    return redirect(url_for("materials"))
+
+# -------------------- DELIVERIES --------------------
+@app.route("/deliveries")
+@login_required
+def deliveries():
+    items = SiteMaterial.query.order_by(SiteMaterial.delivery_date.desc().nullslast()).all()
+    return render_template("deliveries_list.html", items=items, sites=Site.query.all(), materials=Material.query.all())
+
+@app.route("/deliveries/new", methods=["GET","POST"])
+@login_required
+def deliveries_new():
+    sites = Site.query.all()
+    materials = Material.query.all()
+    if request.method == "POST":
+        d = SiteMaterial(
+            site_id=int(request.form["site_id"]),
+            material_id=int(request.form["material_id"]),
+            quantity=float(request.form.get("quantity") or 0),
+            delivery_date=parse_date("delivery_date")
+        )
+        db.session.add(d); commit_session()
+        flash("Delivery recorded", "success")
+        return redirect(url_for("deliveries"))
+    return render_template("deliveries_form.html", item=None, sites=sites, materials=materials)
+
+@app.route("/deliveries/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def deliveries_edit(id):
+    item = SiteMaterial.query.get_or_404(id)
+    sites = Site.query.all()
+    materials = Material.query.all()
+    if request.method == "POST":
+        item.site_id = int(request.form["site_id"])
+        item.material_id = int(request.form["material_id"])
+        item.quantity = float(request.form.get("quantity") or 0)
+        item.delivery_date = parse_date("delivery_date")
+        commit_session()
+        flash("Delivery updated", "success")
+        return redirect(url_for("deliveries"))
+    return render_template("deliveries_form.html", item=item, sites=sites, materials=materials)
+
+@app.route("/deliveries/<int:id>/delete", methods=["POST"])
+@login_required
+def deliveries_delete(id):
+    item = SiteMaterial.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Delivery deleted", "info")
+    return redirect(url_for("deliveries"))
+
+# -------------------- EQUIPMENT --------------------
+@app.route("/equipment")
+@login_required
+def equipment():
+    items = Equipment.query.order_by(Equipment.id.desc()).all()
+    return render_template("equipment_list.html", items=items, sites=Site.query.all())
+
+@app.route("/equipment/new", methods=["GET","POST"])
+@login_required
+def equipment_new():
+    sites = Site.query.all()
+    if request.method == "POST":
+        e = Equipment(
+            name=request.form["name"],
+            type=request.form.get("type"),
+            purchase_date=parse_date("purchase_date"),
+            status=request.form.get("status") or "Available",
+            assigned_site_id=int(request.form["assigned_site_id"]) if request.form.get("assigned_site_id") else None
+        )
+        db.session.add(e); commit_session()
+        flash("Equipment created", "success")
+        return redirect(url_for("equipment"))
+    return render_template("equipment_form.html", item=None, sites=sites)
+
+@app.route("/equipment/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def equipment_edit(id):
+    item = Equipment.query.get_or_404(id)
+    sites = Site.query.all()
+    if request.method == "POST":
+        item.name = request.form["name"]
+        item.type = request.form.get("type")
+        item.purchase_date = parse_date("purchase_date")
+        item.status = request.form.get("status") or "Available"
+        item.assigned_site_id = int(request.form["assigned_site_id"]) if request.form.get("assigned_site_id") else None
+        commit_session()
+        flash("Equipment updated", "success")
+        return redirect(url_for("equipment"))
+    return render_template("equipment_form.html", item=item, sites=sites)
+
+@app.route("/equipment/<int:id>/delete", methods=["POST"])
+@login_required
+def equipment_delete(id):
+    item = Equipment.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Equipment deleted", "info")
+    return redirect(url_for("equipment"))
+
+# -------------------- WORKFORCE --------------------
+@app.route("/workforce")
+@login_required
+def workforce():
+    items = Worker.query.order_by(Worker.id.desc()).all()
+    return render_template("workforce_list.html", items=items, sites=Site.query.all())
+
+@app.route("/workforce/new", methods=["GET","POST"])
+@login_required
+def workforce_new():
+    sites = Site.query.all()
+    if request.method == "POST":
+        w = Worker(
+            name=request.form["name"],
+            role=request.form.get("role"),
+            phone=request.form.get("phone"),
+            assigned_site_id=int(request.form["assigned_site_id"]) if request.form.get("assigned_site_id") else None,
+            hired_date=parse_date("hired_date")
+        )
+        db.session.add(w); commit_session()
+        flash("Worker added", "success")
+        return redirect(url_for("workforce"))
+    return render_template("workforce_form.html", item=None, sites=sites)
+
+@app.route("/workforce/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def workforce_edit(id):
+    item = Worker.query.get_or_404(id)
+    sites = Site.query.all()
+    if request.method == "POST":
+        item.name = request.form["name"]
+        item.role = request.form.get("role")
+        item.phone = request.form.get("phone")
+        item.assigned_site_id = int(request.form["assigned_site_id"]) if request.form.get("assigned_site_id") else None
+        item.hired_date = parse_date("hired_date")
+        commit_session()
+        flash("Worker updated", "success")
+        return redirect(url_for("workforce"))
+    return render_template("workforce_form.html", item=item, sites=sites)
+
+@app.route("/workforce/<int:id>/delete", methods=["POST"])
+@login_required
+def workforce_delete(id):
+    item = Worker.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Worker deleted", "info")
+    return redirect(url_for("workforce"))
+
+# -------------------- TASKS --------------------
+@app.route("/tasks")
+@login_required
+def tasks():
+    items = Task.query.order_by(Task.created_at.desc()).all()
+    return render_template("tasks_list.html", items=items, sites=Site.query.all(), workers=Worker.query.all())
+
+@app.route("/tasks/new", methods=["GET","POST"])
+@login_required
+def tasks_new():
+    sites = Site.query.all()
+    workers = Worker.query.all()
+    if request.method == "POST":
+        t = Task(
+            site_id=int(request.form["site_id"]),
+            description=request.form["description"],
+            status=request.form.get("status") or "Open",
+            assigned_to=int(request.form["assigned_to"]) if request.form.get("assigned_to") else None,
+            deadline=parse_date("deadline")
+        )
+        db.session.add(t); commit_session()
+        flash("Task created", "success")
+        return redirect(url_for("tasks"))
+    return render_template("tasks_form.html", item=None, sites=sites, workers=workers)
+
+@app.route("/tasks/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def tasks_edit(id):
+    item = Task.query.get_or_404(id)
+    sites = Site.query.all()
+    workers = Worker.query.all()
+    if request.method == "POST":
+        item.site_id = int(request.form["site_id"])
+        item.description = request.form["description"]
+        item.status = request.form.get("status") or "Open"
+        item.assigned_to = int(request.form["assigned_to"]) if request.form.get("assigned_to") else None
+        item.deadline = parse_date("deadline")
+        commit_session()
+        flash("Task updated", "success")
+        return redirect(url_for("tasks"))
+    return render_template("tasks_form.html", item=item, sites=sites, workers=workers)
+
+@app.route("/tasks/<int:id>/delete", methods=["POST"])
+@login_required
+def tasks_delete(id):
+    item = Task.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Task deleted", "info")
+    return redirect(url_for("tasks"))
+
+# -------------------- EXPENSES --------------------
+@app.route("/expenses")
+@login_required
+def expenses():
+    items = Expense.query.order_by(Expense.date.desc()).all()
+    return render_template("expenses_list.html", items=items, sites=Site.query.all(), suppliers=Supplier.query.all())
+
+@app.route("/expenses/new", methods=["GET","POST"])
+@login_required
+def expenses_new():
+    sites = Site.query.all()
+    suppliers = Supplier.query.all()
+    if request.method == "POST":
+        ex = Expense(
+            site_id=int(request.form["site_id"]),
+            category=request.form["category"],
+            amount=float(request.form.get("amount") or 0),
+            supplier_id=int(request.form["supplier_id"]) if request.form.get("supplier_id") else None,
+            date=parse_date("date") or date.today(),
+            note=request.form.get("note")
+        )
+        db.session.add(ex); commit_session()
+        flash("Expense recorded", "success")
+        return redirect(url_for("expenses"))
+    return render_template("expenses_form.html", item=None, sites=sites, suppliers=suppliers)
+
+@app.route("/expenses/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def expenses_edit(id):
+    item = Expense.query.get_or_404(id)
+    sites = Site.query.all()
+    suppliers = Supplier.query.all()
+    if request.method == "POST":
+        item.site_id = int(request.form["site_id"])
+        item.category = request.form["category"]
+        item.amount = float(request.form.get("amount") or 0)
+        item.supplier_id = int(request.form["supplier_id"]) if request.form.get("supplier_id") else None
+        item.date = parse_date("date") or date.today()
+        item.note = request.form.get("note")
+        commit_session()
+        flash("Expense updated", "success")
+        return redirect(url_for("expenses"))
+    return render_template("expenses_form.html", item=item, sites=sites, suppliers=suppliers)
+
+@app.route("/expenses/<int:id>/delete", methods=["POST"])
+@login_required
+def expenses_delete(id):
+    item = Expense.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Expense deleted", "info")
+    return redirect(url_for("expenses"))
+
+# -------------------- DOCS & REPORTS --------------------
+@app.route("/documents")
+@login_required
+def documents():
+    docs = Document.query.order_by(Document.id.desc()).all()
+    return render_template("documents.html", docs=docs)
+
+@app.route("/reports")
+@login_required
+def reports():
+    return render_template("reports.html")
+
+# -------------------- ERROR HANDLER --------------------
+@app.errorhandler(404)
+def not_found(e):
+    return render_template("404.html"), 404
+
+with app.app_context():
+    db.create_all()
+    seed_data()
+
+# ------------------ RUN APP ------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=app.config["DEBUG"])

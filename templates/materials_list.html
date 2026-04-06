@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Material • SiteManager360{% endblock %}
+{% block content %}
+<h1>Material</h1>
+<div class="actions"><a class="btn" href="{{ url_for('materials_new') }}">+ New</a></div>
+<table class="table">
+  <thead><tr><th>Name</th><th>Supplier</th><th>Unit</th><th>Cost / Unit</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for item in items %}
+    <tr>
+      <td>{{ item.name }}</td><td>{{ item.supplier.name if item.supplier else '' }}</td><td>{{ item.unit }}</td><td>{{ item.cost_per_unit }}</td>
+      <td class="actions">
+        <a class="btn" href="{{ url_for('materials_edit', id=item.id) }}">Edit</a>
+        {% if demo_mode %}
+          <button class="btn danger" type="button" disabled title="Disabled in demo">Delete</button>
+        {% else %}
+          <form method="post" action="{{ url_for('materials_delete', id=item.id) }}" onsubmit="return confirm('Delete?');" style="display:inline">
+            <button class="btn danger" type="submit">Delete</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

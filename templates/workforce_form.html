@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Workforce • SiteManager360{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if item else 'New' }} Worker</h1>
+<form method="post" class="form">
+  <label>Name
+    <input type="text" name="name" value="{{ item.name if item else '' }}" required>
+  </label>
+  <label>Role
+    <input type="text" name="role" value="{{ item.role if item else '' }}">
+  </label>
+  <label>Phone
+    <input type="text" name="phone" value="{{ item.phone if item else '' }}">
+  </label>
+  <label>Assigned Site (optional)
+    <select name="assigned_site_id">
+      <option value="">-- None --</option>
+      {% for opt in sites %}
+      <option value="{{ opt.id }}" {% if item and item.assigned_site_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Hired Date
+    <input type="date" name="hired_date" value="{{ item.hired_date.strftime('%Y-%m-%d') if item and item.hired_date else '' }}">
+  </label>
+  <div class="form-actions">
+    <button class="btn" type="submit">Save</button>
+    <a class="btn secondary" href="{{ url_for('workforce') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

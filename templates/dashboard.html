@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Dashboard • SiteManager360{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="grid">
+  <div class="card">
+    <div class="metric">{{ project_count }}</div>
+    <div class="label">Projects</div>
+  </div>
+  <div class="card">
+    <div class="metric">{{ site_count }}</div>
+    <div class="label">Sites</div>
+  </div>
+  <div class="card">
+    <div class="metric">{{ worker_count }}</div>
+    <div class="label">Workers</div>
+  </div>
+  <div class="card">
+    <div class="metric">{{ open_tasks }}</div>
+    <div class="label">Open Tasks</div>
+  </div>
+</div>
+{% endblock %}

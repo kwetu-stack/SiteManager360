@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Deliveries • SiteManager360{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if item else 'New' }} Deliverie</h1>
+<form method="post" class="form">
+  <label>Site
+  <select name="site_id">
+    
+    {% for opt in sites %}<option value="{{ opt.id }}" {% if item and item.site_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+  </select>
+</label><label>Material
+  <select name="material_id">
+    
+    {% for opt in materials %}<option value="{{ opt.id }}" {% if item and item.material_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+  </select>
+</label><label>Quantity
+  <input type="number" step="0.01" name="quantity" value="{{ item.quantity if item else '' }}">
+</label><label>Delivery Date
+  <input type="date" name="delivery_date" value="{{ item.delivery_date.strftime('%Y-%m-%d') if item and item.delivery_date else '' }}">
+</label>
+  <div class="form-actions">
+    <button class="btn" type="submit">Save</button>
+    <a class="btn secondary" href="{{ url_for('deliveries') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

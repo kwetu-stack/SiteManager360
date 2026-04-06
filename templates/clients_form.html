@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Client • SiteManager360{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if item else 'New' }} Client</h1>
+<form method="post" class="form">
+  <label>Name
+  <input type="text" name="name" value="{{ item.name if item else '' }}" required>
+</label><label>Contact Person
+  <input type="text" name="contact_person" value="{{ item.contact_person if item else '' }}" required>
+</label><label>Phone
+  <input type="text" name="phone" value="{{ item.phone if item else '' }}" required>
+</label><label>Email
+  <input type="text" name="email" value="{{ item.email if item else '' }}" required>
+</label><label>Address
+  <input type="text" name="address" value="{{ item.address if item else '' }}" required>
+</label>
+  <div class="form-actions">
+    <button class="btn" type="submit">Save</button>
+    <a class="btn secondary" href="{{ url_for('clients') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

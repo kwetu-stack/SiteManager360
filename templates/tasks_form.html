@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Task • SiteManager360{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if item else 'New' }} Task</h1>
+<form method="post" class="form">
+  <label>Site
+  <select name="site_id">
+    
+    {% for opt in sites %}<option value="{{ opt.id }}" {% if item and item.site_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+  </select>
+</label><label>Description
+  <input type="text" name="description" value="{{ item.description if item else '' }}" required>
+</label><label>Status
+  <input type="text" name="status" value="{{ item.status if item else '' }}" required>
+</label><label>Assigned To (optional)
+  <select name="assigned_to">
+    <option value="">-- None --</option>
+    {% for opt in workers %}<option value="{{ opt.id }}" {% if item and item.assigned_to==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+  </select>
+</label><label>Deadline
+  <input type="date" name="deadline" value="{{ item.deadline.strftime('%Y-%m-%d') if item and item.deadline else '' }}">
+</label>
+  <div class="form-actions">
+    <button class="btn" type="submit">Save</button>
+    <a class="btn secondary" href="{{ url_for('tasks') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

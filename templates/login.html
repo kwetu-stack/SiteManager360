@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Sign In · SiteManager360{% endblock %}
+{% block content %}
+<section class="card" style="max-width:420px; margin:auto;">
+  <h2>Sign In</h2>
+  <form method="post" class="form-grid">
+    <label>Email
+      <input type="email" name="email" placeholder="Enter your email" required>
+    </label>
+    <label>Password
+      <input type="password" name="password" placeholder="Enter your password" required>
+    </label>
+    <button type="submit" class="btn">Sign In</button>
+  </form>
+</section>
+{% endblock %}

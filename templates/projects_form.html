@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Project • SiteManager360{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if item else 'New' }} Project</h1>
+<form method="post" class="form">
+  <label>Name
+  <input type="text" name="name" value="{{ item.name if item else '' }}" required>
+</label><label>Client
+  <select name="client_id">
+    
+    {% for opt in clients %}<option value="{{ opt.id }}" {% if item and item.client_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+  </select>
+</label><label>Budget
+  <input type="number" step="0.01" name="budget" value="{{ item.budget if item else '' }}">
+</label><label>Start Date
+  <input type="date" name="start_date" value="{{ item.start_date.strftime('%Y-%m-%d') if item and item.start_date else '' }}">
+</label><label>End Date
+  <input type="date" name="end_date" value="{{ item.end_date.strftime('%Y-%m-%d') if item and item.end_date else '' }}">
+</label><label>Status
+  <input type="text" name="status" value="{{ item.status if item else '' }}" required>
+</label>
+  <div class="form-actions">
+    <button class="btn" type="submit">Save</button>
+    <a class="btn secondary" href="{{ url_for('projects') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

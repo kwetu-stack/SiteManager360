@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Equipment • SiteManager360{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if item else 'New' }} Equipment</h1>
+<form method="post" class="form">
+  <label>Name
+    <input type="text" name="name" value="{{ item.name if item else '' }}" required>
+  </label>
+  <label>Type
+    <input type="text" name="type" value="{{ item.type if item else '' }}">
+  </label>
+  <label>Purchase Date
+    <input type="date" name="purchase_date" value="{{ item.purchase_date.strftime('%Y-%m-%d') if item and item.purchase_date else '' }}">
+  </label>
+  <label>Status
+    <input type="text" name="status" value="{{ item.status if item else 'Available' }}">
+  </label>
+  <label>Assigned Site (optional)
+    <select name="assigned_site_id">
+      <option value="">-- None --</option>
+      {% for opt in sites %}
+      <option value="{{ opt.id }}" {% if item and item.assigned_site_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="form-actions">
+    <button class="btn" type="submit">Save</button>
+    <a class="btn secondary" href="{{ url_for('equipment') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

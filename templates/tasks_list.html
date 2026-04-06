@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Task • SiteManager360{% endblock %}
+{% block content %}
+<h1>Task</h1>
+<div class="actions"><a class="btn" href="{{ url_for('tasks_new') }}">+ New</a></div>
+<table class="table">
+  <thead><tr><th>Site</th><th>Description</th><th>Status</th><th>Assigned To (optional)</th><th>Deadline</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for item in items %}
+    <tr>
+      <td>{{ item.site.name if item.site else '' }}</td><td>{{ item.description }}</td><td>{{ item.status }}</td><td>{{ item.worker.name if item.worker else '' }}</td><td>{{ item.deadline.strftime('%Y-%m-%d') if item.deadline else '' }}</td>
+      <td class="actions">
+        <a class="btn" href="{{ url_for('tasks_edit', id=item.id) }}">Edit</a>
+        {% if demo_mode %}
+          <button class="btn danger" type="button" disabled title="Disabled in demo">Delete</button>
+        {% else %}
+          <form method="post" action="{{ url_for('tasks_delete', id=item.id) }}" onsubmit="return confirm('Delete?');" style="display:inline">
+            <button class="btn danger" type="submit">Delete</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

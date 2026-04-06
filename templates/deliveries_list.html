@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Deliveries • SiteManager360{% endblock %}
+{% block content %}
+<h1>Deliveries</h1>
+<div class="actions"><a class="btn" href="{{ url_for('deliveries_new') }}">+ New</a></div>
+<table class="table">
+  <thead><tr><th>Site</th><th>Material</th><th>Quantity</th><th>Delivery Date</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for item in items %}
+    <tr>
+      <td>{{ item.site.name if item.site else '' }}</td><td>{{ item.material.name if item.material else '' }}</td><td>{{ item.quantity }}</td><td>{{ item.delivery_date.strftime('%Y-%m-%d') if item.delivery_date else '' }}</td>
+      <td class="actions">
+        <a class="btn" href="{{ url_for('deliveries_edit', id=item.id) }}">Edit</a>
+        {% if demo_mode %}
+          <button class="btn danger" type="button" disabled title="Disabled in demo">Delete</button>
+        {% else %}
+          <form method="post" action="{{ url_for('deliveries_delete', id=item.id) }}" onsubmit="return confirm('Delete?');" style="display:inline">
+            <button class="btn danger" type="submit">Delete</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
