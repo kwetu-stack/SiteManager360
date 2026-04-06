@@ -53,7 +53,7 @@ else:
         data_dir = os.path.join(base_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
     sqlite_path = os.path.join(data_dir, "sitemanager360.db").replace("\\", "/")
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{sqlite_path}"
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{sqlite_path}"
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["DEBUG"] = False
