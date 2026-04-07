@@ -990,6 +990,16 @@ def not_found(e):
 
 with app.app_context():
     db.create_all()
+    
+    # Safe column migration
+    from sqlalchemy import text
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE material ADD COLUMN current_stock FLOAT DEFAULT 0"))
+            conn.commit()
+    except:
+        pass  # column already exists
+    
     seed_data()
 
 # ------------------ RUN APP ------------------
