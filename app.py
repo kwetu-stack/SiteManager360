@@ -1016,13 +1016,26 @@ with app.app_context():
     db.create_all()
 
     def safe_add_column(query):
-        try:
-            with db.engine.connect() as conn:
-                conn.execute(text(query))
-                conn.commit()
+        # Railway often runs multiple Gunicorn workers; on SQLite this can cause
+        # "database is locked" during startup migrations. Retry a few times so
+        # the schema converges instead of silently skipping forever.
+        import time
+        last_err = None
+        for attempt in range(6):
+            try:
+                with db.engine.connect() as conn:
+                    conn.execute(text(query))
+                    conn.commit()
                 print("Migration applied:", query)
-        except Exception as e:
-            print("Migration skipped:", e)
+                return
+            except Exception as e:
+                last_err = e
+                msg = str(e).lower()
+                if "database is locked" in msg or "locked" in msg:
+                    time.sleep(0.25 * (attempt + 1))
+                    continue
+                break
+        print("Migration skipped:", last_err)
 
     # FIXES / STARTUP MIGRATIONS
     # These keep older Railway SQLite DBs aligned with current models by
