@@ -1105,6 +1105,7 @@ with app.app_context():
 
     # TASK TABLE
     safe_add_column("ALTER TABLE task ADD COLUMN site_id INTEGER")
+    safe_add_column("ALTER TABLE task ADD COLUMN name TEXT")
     safe_add_column("ALTER TABLE task ADD COLUMN status TEXT")
     safe_add_column("ALTER TABLE task ADD COLUMN assigned_to INTEGER")
     safe_add_column("ALTER TABLE task ADD COLUMN start_date DATE")
