@@ -1036,6 +1036,7 @@ with app.app_context():
     # SITE TABLE
     safe_add_column("ALTER TABLE site ADD COLUMN location TEXT")
     safe_add_column("ALTER TABLE site ADD COLUMN project_id INTEGER")
+    safe_add_column("ALTER TABLE site ADD COLUMN type TEXT DEFAULT 'Block'")
 
     # DELIVERY TABLE
     safe_add_column("ALTER TABLE delivery ADD COLUMN supplier TEXT")
