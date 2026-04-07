@@ -1055,6 +1055,9 @@ with app.app_context():
     safe_add_column("ALTER TABLE workforce ADD COLUMN site_id INTEGER")
     # =====================================================
 
+    # WORKER TABLE (ensure columns exist for older DBs)
+    safe_add_column("ALTER TABLE worker ADD COLUMN status TEXT DEFAULT 'Active'")
+
     seed_data()
 
 # ------------------ RUN APP ------------------
