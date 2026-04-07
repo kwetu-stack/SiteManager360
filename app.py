@@ -60,6 +60,22 @@ app.config["DEBUG"] = False
 
 db = DemoSQLAlchemy(app)
 
+from sqlalchemy import text
+
+with app.app_context():
+    db.create_all()
+
+    def safe_add_column(query):
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text(query))
+                print("Migration applied:", query)
+        except Exception as e:
+            print("Migration skipped:", e)
+
+    # Ensure required columns exist
+    safe_add_column("ALTER TABLE material ADD COLUMN current_stock FLOAT DEFAULT 0")
+
 # -------------------- MODELS --------------------
 class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
