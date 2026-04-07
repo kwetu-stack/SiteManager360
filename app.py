@@ -1010,6 +1010,7 @@ with app.app_context():
     # FIXES
     # MATERIAL TABLE FIXES
     safe_add_column("ALTER TABLE material ADD COLUMN current_stock FLOAT DEFAULT 0")
+    safe_add_column("ALTER TABLE material ADD COLUMN unit TEXT")
 
     # PROJECT TABLE
     safe_add_column("ALTER TABLE project ADD COLUMN description TEXT")
@@ -1017,6 +1018,23 @@ with app.app_context():
 
     # SITE TABLE
     safe_add_column("ALTER TABLE site ADD COLUMN location TEXT")
+    safe_add_column("ALTER TABLE site ADD COLUMN project_id INTEGER")
+
+    # DELIVERY TABLE
+    safe_add_column("ALTER TABLE delivery ADD COLUMN supplier TEXT")
+    safe_add_column("ALTER TABLE delivery ADD COLUMN site_id INTEGER")
+
+    # TASK TABLE
+    safe_add_column("ALTER TABLE task ADD COLUMN site_id INTEGER")
+    safe_add_column("ALTER TABLE task ADD COLUMN status TEXT")
+
+    # EXPENSE TABLE
+    safe_add_column("ALTER TABLE expense ADD COLUMN category TEXT")
+    safe_add_column("ALTER TABLE expense ADD COLUMN site_id INTEGER")
+
+    # WORKFORCE TABLE
+    safe_add_column("ALTER TABLE workforce ADD COLUMN role TEXT")
+    safe_add_column("ALTER TABLE workforce ADD COLUMN site_id INTEGER")
     # =====================================================
 
     seed_data()
