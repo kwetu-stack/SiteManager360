@@ -2,7 +2,7 @@
 {% block title %}Workforce • SiteManager360{% endblock %}
 {% block content %}
 <h1>Workforce</h1>
-<div class="actions"><a class="btn" href="{{ url_for('workforces_new') }}">+ New</a></div>
+<div class="actions"><a class="btn" href="{{ url_for('workforce_new') }}">+ New</a></div>
 <table class="table">
   <thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Assigned Site (optional)</th><th>Hired Date</th><th>Actions</th></tr></thead>
   <tbody>
@@ -10,8 +10,8 @@
     <tr>
       <td>{{ item.name }}</td><td>{{ item.role }}</td><td>{{ item.phone }}</td><td>{{ item.assigned_site.name if item.assigned_site else '' }}</td><td>{{ item.hired_date.strftime('%Y-%m-%d') if item.hired_date else '' }}</td>
       <td class="actions">
-        <a class="btn" href="{{ url_for('workforces_edit', id=item.id) }}">Edit</a>
-        <form method="post" action="{{ url_for('workforces_delete', id=item.id) }}" onsubmit="return confirm('Delete?');" style="display:inline">
+        <a class="btn" href="{{ url_for('workforce_edit', id=item.id) }}">Edit</a>
+        <form method="post" action="{{ url_for('workforce_delete', id=item.id) }}" onsubmit="return confirm('Delete?');" style="display:inline">
           <button class="btn danger" type="submit">Delete</button>
         </form>
       </td>

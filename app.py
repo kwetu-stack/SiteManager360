@@ -388,6 +388,12 @@ def dashboard():
                            materials_stock=materials_stock,
                            total_expenses=total_expenses)
 
+# Alias route for templates/links that use /dashboard
+@app.route("/dashboard")
+@login_required
+def dashboard_alias():
+    return dashboard()
+
 # -------------------- CLIENTS --------------------
 @app.route("/clients")
 @login_required
@@ -912,6 +918,7 @@ def expenses_delete(id):
 
 # -------------------- DOCS & REPORTS --------------------
 @app.route("/documents")
+@login_required
 def documents():
     return render_template("documents.html")
 
@@ -994,6 +1001,16 @@ def chrome_devtools_manifest():
 @app.errorhandler(404)
 def not_found(e):
     return render_template("404.html"), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    # Ensure Railway/Gunicorn logs include the traceback for debugging.
+    import traceback
+    traceback.print_exc()
+    return (
+        "Internal Server Error. Check server logs for the exception traceback.",
+        500,
+    )
 
 with app.app_context():
     db.create_all()
