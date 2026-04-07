@@ -5,16 +5,15 @@
 <div class="actions"><a class="btn" href="{{ url_for('workforce_new') }}">+ New</a></div>
 <table class="table">
   <thead>
-    <tr><th>Name</th><th>Role</th><th>Phone</th><th>Assigned Site</th><th>Hired Date</th><th>Actions</th></tr>
+    <tr><th>Name</th><th>Role</th><th>Site</th><th>Status</th><th>Actions</th></tr>
   </thead>
   <tbody>
   {% for item in items %}
     <tr>
       <td>{{ item.name }}</td>
       <td>{{ item.role }}</td>
-      <td>{{ item.phone }}</td>
       <td>{{ item.assigned_site.name if item.assigned_site_id else '' }}</td>
-      <td>{{ item.hired_date.strftime('%Y-%m-%d') if item.hired_date else '' }}</td>
+      <td>{{ item.status }}</td>
       <td class="actions">
         <a class="btn" href="{{ url_for('workforce_edit', id=item.id) }}">Edit</a>
         {% if demo_mode %}

@@ -3,24 +3,25 @@
 {% block content %}
 <h1>{{ 'Edit' if item else 'New' }} Expense</h1>
 <form method="post" class="form">
-  <label>Site
-  <select name="site_id">
-    
-    {% for opt in sites %}<option value="{{ opt.id }}" {% if item and item.site_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+  <label>Expense Type
+  <select name="type" required>
+    <option value="Material" {% if item and item.type=='Material' %}selected{% endif %}>Material</option>
+    <option value="Labor" {% if item and item.type=='Labor' %}selected{% endif %}>Labor</option>
+    <option value="Transport" {% if item and item.type=='Transport' %}selected{% endif %}>Transport</option>
+    <option value="Misc" {% if item and item.type=='Misc' %}selected{% endif %}>Misc</option>
   </select>
-</label><label>Category
-  <input type="text" name="category" value="{{ item.category if item else '' }}" required>
 </label><label>Amount
-  <input type="number" step="0.01" name="amount" value="{{ item.amount if item else '' }}">
-</label><label>Supplier (optional)
-  <select name="supplier_id">
-    <option value="">-- None --</option>
-    {% for opt in suppliers %}<option value="{{ opt.id }}" {% if item and item.supplier_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+  <input type="number" step="0.01" name="amount" value="{{ item.amount if item else '' }}" required>
+</label><label>Site
+  <select name="site_id" required>
+    {% for opt in sites %}
+      <option value="{{ opt.id }}" {% if item and item.site_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>
+    {% endfor %}
   </select>
 </label><label>Date
   <input type="date" name="date" value="{{ item.date.strftime('%Y-%m-%d') if item and item.date else '' }}">
-</label><label>Note
-  <input type="text" name="note" value="{{ item.note if item else '' }}" required>
+</label><label>Description
+  <input type="text" name="description" value="{{ item.description if item else '' }}">
 </label>
   <div class="form-actions">
     <button class="btn" type="submit">Save</button>

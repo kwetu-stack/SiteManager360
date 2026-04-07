@@ -12,6 +12,9 @@
   <label>Phone
     <input type="text" name="phone" value="{{ item.phone if item else '' }}">
   </label>
+  <label>Hired Date
+    <input type="date" name="hired_date" value="{{ item.hired_date.strftime('%Y-%m-%d') if item and item.hired_date else '' }}">
+  </label>
   <label>Assigned Site (optional)
     <select name="assigned_site_id">
       <option value="">-- None --</option>
@@ -20,8 +23,11 @@
       {% endfor %}
     </select>
   </label>
-  <label>Hired Date
-    <input type="date" name="hired_date" value="{{ item.hired_date.strftime('%Y-%m-%d') if item and item.hired_date else '' }}">
+  <label>Status
+    <select name="status" required>
+      <option value="Active" {% if item and item.status=='Active' %}selected{% endif %}>Active</option>
+      <option value="Inactive" {% if item and item.status=='Inactive' %}selected{% endif %}>Inactive</option>
+    </select>
   </label>
   <div class="form-actions">
     <button class="btn" type="submit">Save</button>

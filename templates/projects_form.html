@@ -5,19 +5,29 @@
 <form method="post" class="form">
   <label>Name
   <input type="text" name="name" value="{{ item.name if item else '' }}" required>
+</label><label>Location
+  <input type="text" name="location" value="{{ item.location if item else '' }}">
 </label><label>Client
   <select name="client_id">
-    
-    {% for opt in clients %}<option value="{{ opt.id }}" {% if item and item.client_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+    {% for opt in clients %}
+      <option value="{{ opt.id }}" {% if item and item.client_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>
+    {% endfor %}
   </select>
-</label><label>Budget
-  <input type="number" step="0.01" name="budget" value="{{ item.budget if item else '' }}">
 </label><label>Start Date
   <input type="date" name="start_date" value="{{ item.start_date.strftime('%Y-%m-%d') if item and item.start_date else '' }}">
-</label><label>End Date
+</label><label>Expected End Date
   <input type="date" name="end_date" value="{{ item.end_date.strftime('%Y-%m-%d') if item and item.end_date else '' }}">
 </label><label>Status
-  <input type="text" name="status" value="{{ item.status if item else '' }}" required>
+  <select name="status" required>
+    <option value="Active" {% if item and item.status=='Active' %}selected{% endif %}>Active</option>
+    <option value="Completed" {% if item and item.status=='Completed' %}selected{% endif %}>Completed</option>
+    <option value="On Hold" {% if item and item.status=='On Hold' %}selected{% endif %}>On Hold</option>
+    <option value="Planned" {% if item and item.status=='Planned' %}selected{% endif %}>Planned</option>
+  </select>
+</label><label>Description (optional)
+  <textarea name="description" rows="4">{{ item.description if item else '' }}</textarea>
+</label><label>Budget
+  <input type="number" step="0.01" name="budget" value="{{ item.budget if item else '' }}">
 </label>
   <div class="form-actions">
     <button class="btn" type="submit">Save</button>

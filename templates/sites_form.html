@@ -6,23 +6,36 @@
   <label>Name
   <input type="text" name="name" value="{{ item.name if item else '' }}" required>
 </label><label>Project
-  <select name="project_id">
-    
-    {% for opt in projects %}<option value="{{ opt.id }}" {% if item and item.project_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+  <select name="project_id" required>
+    {% for opt in projects %}
+      <option value="{{ opt.id }}" {% if item and item.project_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>
+    {% endfor %}
   </select>
-</label><label>Location
-  <input type="text" name="location" value="{{ item.location if item else '' }}" required>
+</label><label>Type
+  <select name="type" required>
+    <option value="Block" {% if item and item.type=='Block' %}selected{% endif %}>Block</option>
+    <option value="Parking" {% if item and item.type=='Parking' %}selected{% endif %}>Parking</option>
+    <option value="Rooftop" {% if item and item.type=='Rooftop' %}selected{% endif %}>Rooftop</option>
+    <option value="Utility" {% if item and item.type=='Utility' %}selected{% endif %}>Utility</option>
+  </select>
+</label><label>Location (optional)
+  <input type="text" name="location" value="{{ item.location if item else '' }}">
 </label><label>Manager (optional)
   <select name="manager_id">
     <option value="">-- None --</option>
-    {% for opt in workers %}<option value="{{ opt.id }}" {% if item and item.manager_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>{% endfor %}
+    {% for opt in workers %}
+      <option value="{{ opt.id }}" {% if item and item.manager_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>
+    {% endfor %}
   </select>
 </label><label>Start Date
   <input type="date" name="start_date" value="{{ item.start_date.strftime('%Y-%m-%d') if item and item.start_date else '' }}">
 </label><label>End Date
   <input type="date" name="end_date" value="{{ item.end_date.strftime('%Y-%m-%d') if item and item.end_date else '' }}">
 </label><label>Status
-  <input type="text" name="status" value="{{ item.status if item else '' }}" required>
+  <select name="status" required>
+    <option value="Active" {% if item and item.status=='Active' %}selected{% endif %}>Active</option>
+    <option value="Completed" {% if item and item.status=='Completed' %}selected{% endif %}>Completed</option>
+  </select>
 </label>
   <div class="form-actions">
     <button class="btn" type="submit">Save</button>

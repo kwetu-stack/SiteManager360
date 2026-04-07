@@ -1,6 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Reports • SiteManager360{% endblock %}
 {% block content %}
-<h1>Reports</h1>
-<p>Placeholder: reporting dashboards and exports will appear here.</p>
+<h1>Site Reports</h1>
+<div class="reports">
+  {% for summary in summaries %}
+  <div class="report-card">
+    <h3>{{ summary.site.name }}</h3>
+    <p><strong>Materials Delivered:</strong> {{ summary.materials_delivered }} units</p>
+    <p><strong>Total Expenses:</strong> KES {{ "{:,.0f}".format(summary.expenses_total) }}</p>
+    <p><strong>Workers Assigned:</strong> {{ summary.workers_count }}</p>
+  </div>
+  {% endfor %}
+</div>
+<style>
+.reports { display: flex; flex-wrap: wrap; gap: 20px; }
+.report-card { background: #2a2a2a; border: 1px solid #444; border-radius: 8px; padding: 20px; flex: 1 1 300px; }
+.report-card h3 { margin-top: 0; color: #4a9eff; }
+.report-card p { margin: 10px 0; }
+</style>
 {% endblock %}

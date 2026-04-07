@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Document • SiteManager360{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if item else 'New' }} Document</h1>
+<form method="post" class="form">
+  <label>Name
+    <input type="text" name="name" value="{{ item.name if item else '' }}" required>
+  </label>
+  <label>Type
+    <select name="type" required>
+      <option value="Invoice" {% if item and item.type=='Invoice' %}selected{% endif %}>Invoice</option>
+      <option value="Delivery Note" {% if item and item.type=='Delivery Note' %}selected{% endif %}>Delivery Note</option>
+      <option value="Permit" {% if item and item.type=='Permit' %}selected{% endif %}>Permit</option>
+      <option value="Receipt" {% if item and item.type=='Receipt' %}selected{% endif %}>Receipt</option>
+    </select>
+  </label>
+  <label>Site (optional)
+    <select name="site_id">
+      <option value="">-- Project Level --</option>
+      {% for opt in sites %}
+      <option value="{{ opt.id }}" {% if item and item.site_id==opt.id %}selected{% endif %}>{{ opt.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>File Path (optional)
+    <input type="text" name="file_path" value="{{ item.file_path if item else '' }}" placeholder="e.g., /uploads/doc.pdf">
+  </label>
+  <label>Date
+    <input type="date" name="date" value="{{ item.date.strftime('%Y-%m-%d') if item and item.date else '' }}">
+  </label>
+  <div class="form-actions">
+    <button class="btn" type="submit">Save</button>
+    <a class="btn secondary" href="{{ url_for('documents') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Expense • SiteManager360{% endblock %}
+{% block title %}Expenses • SiteManager360{% endblock %}
 {% block content %}
-<h1>Expense</h1>
+<h1>Expenses</h1>
 <div class="actions"><a class="btn" href="{{ url_for('expenses_new') }}">+ New</a></div>
 <table class="table">
-  <thead><tr><th>Site</th><th>Category</th><th>Amount</th><th>Supplier (optional)</th><th>Date</th><th>Note</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Type</th><th>Amount</th><th>Site</th><th>Date</th><th>Actions</th></tr></thead>
   <tbody>
   {% for item in items %}
     <tr>
-      <td>{{ item.site.name if item.site else '' }}</td><td>{{ item.category }}</td><td>{{ item.amount }}</td><td>{{ item.supplier.name if item.supplier else '' }}</td><td>{{ item.date.strftime('%Y-%m-%d') if item.date else '' }}</td><td>{{ item.note }}</td>
+      <td>{{ item.type }}</td><td>{{ item.amount }}</td><td>{{ item.site.name if item.site else '' }}</td><td>{{ item.date.strftime('%Y-%m-%d') if item.date else '' }}</td>
       <td class="actions">
         <a class="btn" href="{{ url_for('expenses_edit', id=item.id) }}">Edit</a>
         {% if demo_mode %}

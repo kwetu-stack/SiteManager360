@@ -1,14 +1,29 @@
 {% extends "base.html" %}
-{% block title %}Site • SiteManager360{% endblock %}
+{% block title %}Sites • SiteManager360{% endblock %}
 {% block content %}
-<h1>Site</h1>
-<div class="actions"><a class="btn" href="{{ url_for('sites_new') }}">+ New</a></div>
+<h1>Sites</h1>
+<div class="actions">
+  <a class="btn" href="{{ url_for('sites_new') }}">+ New</a>
+</div>
+<form method="get" class="form" style="margin-bottom:16px">
+  <label>Project filter
+    <select name="project_id" onchange="this.form.submit()">
+      <option value="">All projects</option>
+      {% for opt in projects %}
+        <option value="{{ opt.id }}" {% if selected_project_id == opt.id %}selected{% endif %}>{{ opt.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
 <table class="table">
-  <thead><tr><th>Name</th><th>Project</th><th>Location</th><th>Manager (optional)</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Name</th><th>Project</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
   <tbody>
   {% for item in items %}
     <tr>
-      <td>{{ item.name }}</td><td>{{ item.project.name if item.project else '' }}</td><td>{{ item.location }}</td><td>{{ item.manager.name if item.manager else '' }}</td><td>{{ item.start_date.strftime('%Y-%m-%d') if item.start_date else '' }}</td><td>{{ item.end_date.strftime('%Y-%m-%d') if item.end_date else '' }}</td><td>{{ item.status }}</td>
+      <td>{{ item.name }}</td>
+      <td>{{ item.project.name if item.project else '' }}</td>
+      <td>{{ item.type or '' }}</td>
+      <td>{{ item.status }}</td>
       <td class="actions">
         <a class="btn" href="{{ url_for('sites_edit', id=item.id) }}">Edit</a>
         {% if demo_mode %}

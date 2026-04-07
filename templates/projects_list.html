@@ -1,14 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Project • SiteManager360{% endblock %}
+{% block title %}Projects • SiteManager360{% endblock %}
 {% block content %}
-<h1>Project</h1>
+<h1>Projects</h1>
 <div class="actions"><a class="btn" href="{{ url_for('projects_new') }}">+ New</a></div>
 <table class="table">
-  <thead><tr><th>Name</th><th>Client</th><th>Budget</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Name</th><th>Location</th><th>Status</th><th>Start Date</th><th>Actions</th></tr></thead>
   <tbody>
   {% for item in items %}
     <tr>
-      <td>{{ item.name }}</td><td>{{ item.client.name if item.client else '' }}</td><td>{{ item.budget }}</td><td>{{ item.start_date.strftime('%Y-%m-%d') if item.start_date else '' }}</td><td>{{ item.end_date.strftime('%Y-%m-%d') if item.end_date else '' }}</td><td>{{ item.status }}</td>
+      <td>{{ item.name }}</td>
+      <td>{{ item.location or '' }}</td>
+      <td>{{ item.status }}</td>
+      <td>{{ item.start_date.strftime('%Y-%m-%d') if item.start_date else '' }}</td>
       <td class="actions">
         <a class="btn" href="{{ url_for('projects_edit', id=item.id) }}">Edit</a>
         {% if demo_mode %}

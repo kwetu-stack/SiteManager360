@@ -1,23 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Dashboard • SiteManager360{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
+<h1>Welcome to SiteManager360</h1>
+<p>Manage your construction sites efficiently</p>
 <div class="grid">
   <div class="card">
-    <div class="metric">{{ project_count }}</div>
-    <div class="label">Projects</div>
+    <div class="metric">{{ active_projects }}</div>
+    <div class="label">Active Projects</div>
   </div>
   <div class="card">
-    <div class="metric">{{ site_count }}</div>
-    <div class="label">Sites</div>
+    <div class="metric">{{ active_sites }}</div>
+    <div class="label">Active Sites</div>
   </div>
   <div class="card">
-    <div class="metric">{{ worker_count }}</div>
-    <div class="label">Workers</div>
+    <div class="metric">{{ materials_stock }}</div>
+    <div class="label">Materials in Stock</div>
   </div>
   <div class="card">
-    <div class="metric">{{ open_tasks }}</div>
-    <div class="label">Open Tasks</div>
+    <div class="metric">KES {{ "{:,.0f}".format(total_expenses) }}</div>
+    <div class="label">Total Expenses</div>
   </div>
 </div>
 {% endblock %}

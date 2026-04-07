@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, date
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, session
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, session, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_sqlalchemy.session import Session as FlaskSQLAlchemySession
 from dotenv import load_dotenv
@@ -74,11 +74,13 @@ class Client(db.Model):
 class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
+    location = db.Column(db.String(150))
     client_id = db.Column(db.Integer, db.ForeignKey("client.id"), nullable=False)
     budget = db.Column(db.Float, default=0.0)
     start_date = db.Column(db.Date)
     end_date = db.Column(db.Date)
-    status = db.Column(db.String(50), default="Planned")
+    status = db.Column(db.String(50), default="Active")
+    description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     sites = db.relationship("Site", backref="project", lazy=True)
 
@@ -89,11 +91,13 @@ class Worker(db.Model):
     phone = db.Column(db.String(50))
     assigned_site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)
     hired_date = db.Column(db.Date)
+    status = db.Column(db.String(50), default="Active")
 
 class Site(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
     name = db.Column(db.String(150), nullable=False)
+    type = db.Column(db.String(50), default="Block")
     location = db.Column(db.String(150))
     manager_id = db.Column(db.Integer, db.ForeignKey("worker.id"), nullable=True)
     start_date = db.Column(db.Date)
@@ -112,9 +116,11 @@ class Supplier(db.Model):
 
 class Material(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    supplier_id = db.Column(db.Integer, db.ForeignKey("supplier.id"), nullable=False)
+    supplier_id = db.Column(db.Integer, db.ForeignKey("supplier.id"), nullable=True)
     name = db.Column(db.String(150), nullable=False)
     unit = db.Column(db.String(50), default="pcs")
+    current_stock = db.Column(db.Float, default=0.0)
+    reorder_level = db.Column(db.Float)
     cost_per_unit = db.Column(db.Float, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -122,8 +128,11 @@ class SiteMaterial(db.Model):  # Deliveries
     id = db.Column(db.Integer, primary_key=True)
     site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=False)
     material_id = db.Column(db.Integer, db.ForeignKey("material.id"), nullable=False)
+    unit = db.Column(db.String(50))
     quantity = db.Column(db.Float, default=0.0)
     delivery_date = db.Column(db.Date)
+    supplier_name = db.Column(db.String(150))
+    notes = db.Column(db.String(250))
     site = db.relationship("Site", backref="deliveries", lazy=True)
     material = db.relationship("Material", backref="deliveries", lazy=True)
 
@@ -139,10 +148,11 @@ class Equipment(db.Model):
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=False)
-    description = db.Column(db.String(250), nullable=False)
-    status = db.Column(db.String(50), default="Open")
+    name = db.Column(db.String(250), nullable=False)
+    status = db.Column(db.String(50), default="Pending")
     assigned_to = db.Column(db.Integer, db.ForeignKey("worker.id"), nullable=True)
-    deadline = db.Column(db.Date)
+    start_date = db.Column(db.Date)
+    end_date = db.Column(db.Date)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     site = db.relationship("Site", backref="tasks", lazy=True)
     worker = db.relationship("Worker", foreign_keys=[assigned_to], uselist=False)
@@ -150,17 +160,20 @@ class Task(db.Model):
 class Expense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=False)
-    category = db.Column(db.String(120), nullable=False)
+    type = db.Column(db.String(120), nullable=False)
     amount = db.Column(db.Float, default=0.0)
-    supplier_id = db.Column(db.Integer, db.ForeignKey("supplier.id"), nullable=True)
     date = db.Column(db.Date, default=date.today)
-    note = db.Column(db.String(250))
+    description = db.Column(db.String(250))
     site = db.relationship("Site", backref="expenses", lazy=True)
-    supplier = db.relationship("Supplier", foreign_keys=[supplier_id], uselist=False)
 
 class Document(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    type = db.Column(db.String(50), nullable=False)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)
+    file_path = db.Column(db.String(500))
+    date = db.Column(db.Date, default=date.today)
+    site = db.relationship("Site", backref="documents", lazy=True)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -215,41 +228,60 @@ def seed_data():
         db.session.add_all([c1, c2]); db.session.flush()
 
         # Workers
-        w1 = Worker(name="Eric Kimani", role="Site Manager", phone="+254711000111", hired_date=date(2023,1,12))
-        w2 = Worker(name="Lydia W.", role="Engineer", phone="+254722000222", hired_date=date(2023,3,5))
-        w3 = Worker(name="Joseph N.", role="Foreman", phone="+254733000333", hired_date=date(2024,5,1))
+        w1 = Worker(name="Eric Kimani", role="Site Manager", phone="+254711000111", hired_date=date(2023,1,12), status="Active")
+        w2 = Worker(name="Lydia W.", role="Engineer", phone="+254722000222", hired_date=date(2023,3,5), status="Active")
+        w3 = Worker(name="Joseph N.", role="Foreman", phone="+254733000333", hired_date=date(2024,5,1), status="Active")
         db.session.add_all([w1, w2, w3]); db.session.flush()
 
         # Projects
-        p1 = Project(name="Westlands Office Tower", client_id=c1.id, budget=120000000.0,
-                     start_date=date(2024,1,15), end_date=date(2025,12,30), status="Active")
-        p2 = Project(name="Thika Road Housing", client_id=c2.id, budget=80000000.0,
-                     start_date=date(2024,6,1), end_date=date(2026,3,1), status="Planned")
+        p1 = Project(name="Westlands Office Complex", client_id=c1.id,
+                     location="Westlands, Nairobi", budget=120000000.0,
+                     start_date=date(2024,1,15), end_date=date(2025,12,30), status="Active",
+                     description="Commercial office development with integrated parking and two towers.")
+        p2 = Project(name="Kilimani Heights Apartments", client_id=c2.id,
+                     location="Kilimani, Nairobi", budget=98000000.0,
+                     start_date=date(2024,2,1), end_date=date(2025,11,15), status="Active",
+                     description="Residential towers with rooftop amenities and basement parking.")
         db.session.add_all([p1, p2]); db.session.flush()
 
-        # Sites
-        s1 = Site(project_id=p1.id, name="Westlands Main Site", location="Westlands, Nairobi",
+        # Sites for Westlands Office Complex
+        s1 = Site(project_id=p1.id, name="Tower A", type="Block", location="Westlands, Nairobi",
                   manager_id=w1.id, start_date=date(2024,1,20), status="Active")
-        s2 = Site(project_id=p1.id, name="Annex Site", location="Riverside, Nairobi",
-                  manager_id=w2.id, start_date=date(2024,2,5), status="Active")
-        s3 = Site(project_id=p2.id, name="Block A", location="Thika Road, Nairobi",
-                  manager_id=w3.id, start_date=date(2024,7,1), status="Planned")
-        db.session.add_all([s1, s2, s3]); db.session.flush()
+        s2 = Site(project_id=p1.id, name="Tower B", type="Block", location="Westlands, Nairobi",
+                  manager_id=w2.id, start_date=date(2024,2,10), status="Active")
+        s3 = Site(project_id=p1.id, name="Parking Area", type="Parking", location="Westlands, Nairobi",
+                  manager_id=w3.id, start_date=date(2024,2,25), status="Active")
+
+        # Sites for Kilimani Heights Apartments
+        s4 = Site(project_id=p2.id, name="Block A", type="Block", location="Kilimani, Nairobi",
+                  manager_id=w1.id, start_date=date(2024,2,15), status="Active")
+        s5 = Site(project_id=p2.id, name="Block B", type="Block", location="Kilimani, Nairobi",
+                  manager_id=w2.id, start_date=date(2024,3,1), status="Active")
+        s6 = Site(project_id=p2.id, name="Basement Parking", type="Parking", location="Kilimani, Nairobi",
+                  manager_id=w3.id, start_date=date(2024,3,5), status="Active")
+        s7 = Site(project_id=p2.id, name="Rooftop", type="Rooftop", location="Kilimani, Nairobi",
+                  manager_id=w1.id, start_date=date(2024,3,10), status="Active")
+        db.session.add_all([s1, s2, s3, s4, s5, s6, s7]); db.session.flush()
 
         # Suppliers & Materials
         sup1 = Supplier(name="BuildMart Ltd", phone="+254701111111", email="sales@buildmart.co.ke", category="Cement & Steel")
         sup2 = Supplier(name="MegaTools KE", phone="+254702222222", email="info@megatools.co.ke", category="Tools & Equipment")
         db.session.add_all([sup1, sup2]); db.session.flush()
 
-        m1 = Material(supplier_id=sup1.id, name="Portland Cement 50kg", unit="bag", cost_per_unit=850.0)
-        m2 = Material(supplier_id=sup1.id, name="Rebar Steel 12mm", unit="bar", cost_per_unit=1200.0)
-        m3 = Material(supplier_id=sup2.id, name="Safety Helmet", unit="pcs", cost_per_unit=950.0)
-        db.session.add_all([m1, m2, m3]); db.session.flush()
+        m1 = Material(supplier_id=sup1.id, name="Cement (Bamburi)", unit="Bags", current_stock=200, reorder_level=100, cost_per_unit=850.0)
+        m2 = Material(supplier_id=sup1.id, name="Steel Bars (Y10)", unit="Pieces", current_stock=50, reorder_level=30, cost_per_unit=120.0)
+        m3 = Material(supplier_id=sup1.id, name="Steel Bars (Y12)", unit="Pieces", current_stock=40, reorder_level=30, cost_per_unit=130.0)
+        m4 = Material(supplier_id=sup1.id, name="Sand", unit="Tons", current_stock=3, reorder_level=2, cost_per_unit=3000.0)
+        m5 = Material(supplier_id=sup1.id, name="Ballast", unit="Tons", current_stock=1, reorder_level=1, cost_per_unit=3200.0)
+        m6 = Material(supplier_id=sup2.id, name="Paint (Crown)", unit="Litres", current_stock=20, reorder_level=10, cost_per_unit=550.0)
+        db.session.add_all([m1, m2, m3, m4, m5, m6]); db.session.flush()
 
         # Deliveries
-        d1 = SiteMaterial(site_id=s1.id, material_id=m1.id, quantity=200, delivery_date=date(2024,2,10))
-        d2 = SiteMaterial(site_id=s1.id, material_id=m2.id, quantity=120, delivery_date=date(2024,2,12))
-        db.session.add_all([d1, d2])
+        d1 = SiteMaterial(site_id=s4.id, material_id=m1.id, unit=m1.unit, quantity=200, delivery_date=date(2024,3,20), supplier_name="BuildMart Ltd", notes="Initial cement delivery")
+        d2 = SiteMaterial(site_id=s5.id, material_id=m4.id, unit=m4.unit, quantity=3, delivery_date=date(2024,3,22), supplier_name="BuildMart Ltd", notes="Sand for slab works")
+        d3 = SiteMaterial(site_id=s6.id, material_id=m5.id, unit=m5.unit, quantity=1, delivery_date=date(2024,3,24), supplier_name="BuildMart Ltd", notes="Ballast delivery")
+        d4 = SiteMaterial(site_id=s4.id, material_id=m2.id, unit=m2.unit, quantity=50, delivery_date=date(2024,3,25), supplier_name="BuildMart Ltd", notes="Steel bars for reinforcement")
+        db.session.add_all([d1, d2, d3, d4])
 
         # Equipment
         e1 = Equipment(name="CAT 320D Excavator", type="Excavator", purchase_date=date(2022,9,15), status="In Use", assigned_site_id=s1.id)
@@ -257,18 +289,21 @@ def seed_data():
         db.session.add_all([e1, e2])
 
         # Tasks
-        t1 = Task(site_id=s1.id, description="Excavation for foundation", status="In_Progress", assigned_to=w3.id, deadline=date(2024,3,15))
-        t2 = Task(site_id=s2.id, description="Install temporary fencing", status="Open", assigned_to=w2.id, deadline=date(2024,3,1))
+        t1 = Task(site_id=s1.id, name="Excavation for foundation", status="In_Progress", assigned_to=w3.id, start_date=date(2024,3,1), end_date=date(2024,3,15))
+        t2 = Task(site_id=s2.id, name="Install temporary fencing", status="Open", assigned_to=w2.id, start_date=date(2024,3,1), end_date=date(2024,3,10))
         db.session.add_all([t1, t2])
 
         # Expenses
-        ex1 = Expense(site_id=s1.id, category="Fuel", amount=45000.0, supplier_id=None, date=date(2024,2,14), note="Excavator fuel")
-        ex2 = Expense(site_id=s1.id, category="Materials", amount=170000.0, supplier_id=sup1.id, date=date(2024,2,12), note="Cement & steel")
+        ex1 = Expense(site_id=s1.id, type="Transport", amount=45000.0, date=date(2024,2,14), description="Excavator fuel")
+        ex2 = Expense(site_id=s1.id, type="Material", amount=170000.0, date=date(2024,2,12), description="Cement & steel")
         db.session.add_all([ex1, ex2])
 
         # Docs
-        doc = Document(title="Safety Compliance Checklist")
-        db.session.add(doc)
+        doc1 = Document(name="Delivery Note - Cement", type="Delivery Note", site_id=s4.id, date=date(2024,3,20))
+        doc2 = Document(name="Invoice - Steel Supply", type="Invoice", site_id=s5.id, date=date(2024,3,25))
+        doc3 = Document(name="Building Permit", type="Permit", site_id=None, date=date(2024,1,15))  # Project level
+        doc4 = Document(name="Receipt - Transport", type="Receipt", site_id=s6.id, date=date(2024,2,14))
+        db.session.add_all([doc1, doc2, doc3, doc4])
 
         commit_session()
     finally:
@@ -280,7 +315,7 @@ def login_required(view_func):
     def wrapped(*args, **kwargs):
         if is_demo():
             demo_user = User.query.order_by(User.id.asc()).first()
-            if demo_user and not session.get("user_id"):
+            if demo_user:
                 session["user_id"] = demo_user.id
         if not session.get("user_id"):
             return redirect(url_for("login", next=request.path))
@@ -295,7 +330,7 @@ def inject_demo_mode():
 def block_post_in_demo():
     if is_demo():
         demo_user = User.query.order_by(User.id.asc()).first()
-        if demo_user and not session.get("user_id") and request.endpoint != "static":
+        if demo_user and request.endpoint != "static":
             session["user_id"] = demo_user.id
         if request.method == "POST":
             flash("Demo Mode: Action simulated successfully.", "info")
@@ -336,15 +371,15 @@ def health():
 @app.route("/")
 @login_required
 def dashboard():
-    project_count = db.session.scalar(db.select(db.func.count(Project.id))) or 0
-    site_count = db.session.scalar(db.select(db.func.count(Site.id))) or 0
-    worker_count = db.session.scalar(db.select(db.func.count(Worker.id))) or 0
-    open_tasks = db.session.scalar(db.select(db.func.count(Task.id)).where(Task.status != "Done")) or 0
+    active_projects = db.session.scalar(db.select(db.func.count(Project.id)).where(Project.status == "Active")) or 0
+    active_sites = db.session.scalar(db.select(db.func.count(Site.id)).where(Site.status == "Active")) or 0
+    materials_stock = db.session.scalar(db.select(db.func.sum(Material.current_stock))) or 0
+    total_expenses = db.session.scalar(db.select(db.func.sum(Expense.amount))) or 0
     return render_template("dashboard.html",
-                           project_count=project_count,
-                           site_count=site_count,
-                           worker_count=worker_count,
-                           open_tasks=open_tasks)
+                           active_projects=active_projects,
+                           active_sites=active_sites,
+                           materials_stock=materials_stock,
+                           total_expenses=total_expenses)
 
 # -------------------- CLIENTS --------------------
 @app.route("/clients")
@@ -406,11 +441,13 @@ def projects_new():
     if request.method == "POST":
         p = Project(
             name=request.form["name"],
+            location=request.form.get("location"),
             client_id=int(request.form["client_id"]),
             budget=float(request.form.get("budget") or 0),
             start_date=parse_date("start_date"),
             end_date=parse_date("end_date"),
-            status=request.form.get("status") or "Planned"
+            status=request.form.get("status") or "Active",
+            description=request.form.get("description")
         )
         db.session.add(p); commit_session()
         flash("Project created", "success")
@@ -424,11 +461,13 @@ def projects_edit(id):
     clients = Client.query.all()
     if request.method == "POST":
         item.name = request.form["name"]
+        item.location = request.form.get("location")
         item.client_id = int(request.form["client_id"])
         item.budget = float(request.form.get("budget") or 0)
         item.start_date = parse_date("start_date")
         item.end_date = parse_date("end_date")
-        item.status = request.form.get("status") or "Planned"
+        item.status = request.form.get("status") or "Active"
+        item.description = request.form.get("description")
         commit_session()
         flash("Project updated", "success")
         return redirect(url_for("projects"))
@@ -446,8 +485,12 @@ def projects_delete(id):
 @app.route("/sites")
 @login_required
 def sites():
-    items = Site.query.order_by(Site.id.desc()).all()
-    return render_template("sites_list.html", items=items, projects=Project.query.all(), workers=Worker.query.all())
+    project_id = request.args.get("project_id", type=int)
+    query = Site.query.order_by(Site.id.desc())
+    if project_id:
+        query = query.filter_by(project_id=project_id)
+    items = query.all()
+    return render_template("sites_list.html", items=items, projects=Project.query.all(), workers=Worker.query.all(), selected_project_id=project_id)
 
 @app.route("/sites/new", methods=["GET","POST"])
 @login_required
@@ -458,6 +501,7 @@ def sites_new():
         s = Site(
             project_id=int(request.form["project_id"]),
             name=request.form["name"],
+            type=request.form.get("type") or "Block",
             location=request.form.get("location"),
             manager_id=int(request.form["manager_id"]) if request.form.get("manager_id") else None,
             start_date=parse_date("start_date"),
@@ -478,6 +522,7 @@ def sites_edit(id):
     if request.method == "POST":
         item.project_id = int(request.form["project_id"])
         item.name = request.form["name"]
+        item.type = request.form.get("type") or "Block"
         item.location = request.form.get("location")
         item.manager_id = int(request.form["manager_id"]) if request.form.get("manager_id") else None
         item.start_date = parse_date("start_date")
@@ -552,10 +597,13 @@ def materials():
 def materials_new():
     suppliers = Supplier.query.all()
     if request.method == "POST":
+        supplier_value = request.form.get("supplier_id")
         m = Material(
-            supplier_id=int(request.form["supplier_id"]),
+            supplier_id=int(supplier_value) if supplier_value else None,
             name=request.form["name"],
             unit=request.form.get("unit") or "pcs",
+            current_stock=float(request.form.get("current_stock") or 0),
+            reorder_level=float(request.form.get("reorder_level") or 0) if request.form.get("reorder_level") else None,
             cost_per_unit=float(request.form.get("cost_per_unit") or 0),
         )
         db.session.add(m); commit_session()
@@ -569,9 +617,12 @@ def materials_edit(id):
     item = Material.query.get_or_404(id)
     suppliers = Supplier.query.all()
     if request.method == "POST":
-        item.supplier_id = int(request.form["supplier_id"])
+        supplier_value = request.form.get("supplier_id")
+        item.supplier_id = int(supplier_value) if supplier_value else None
         item.name = request.form["name"]
         item.unit = request.form.get("unit") or "pcs"
+        item.current_stock = float(request.form.get("current_stock") or 0)
+        item.reorder_level = float(request.form.get("reorder_level") or 0) if request.form.get("reorder_level") else None
         item.cost_per_unit = float(request.form.get("cost_per_unit") or 0)
         commit_session()
         flash("Material updated", "success")
@@ -599,12 +650,18 @@ def deliveries_new():
     sites = Site.query.all()
     materials = Material.query.all()
     if request.method == "POST":
+        material = Material.query.get_or_404(int(request.form["material_id"]))
+        quantity = float(request.form.get("quantity") or 0)
         d = SiteMaterial(
             site_id=int(request.form["site_id"]),
-            material_id=int(request.form["material_id"]),
-            quantity=float(request.form.get("quantity") or 0),
-            delivery_date=parse_date("delivery_date")
+            material_id=material.id,
+            unit=material.unit,
+            quantity=quantity,
+            delivery_date=parse_date("delivery_date"),
+            supplier_name=request.form.get("supplier_name"),
+            notes=request.form.get("notes")
         )
+        material.current_stock = (material.current_stock or 0) + quantity
         db.session.add(d); commit_session()
         flash("Delivery recorded", "success")
         return redirect(url_for("deliveries"))
@@ -617,10 +674,22 @@ def deliveries_edit(id):
     sites = Site.query.all()
     materials = Material.query.all()
     if request.method == "POST":
+        new_material = Material.query.get_or_404(int(request.form["material_id"]))
+        new_quantity = float(request.form.get("quantity") or 0)
+        old_material = item.material
+        old_quantity = item.quantity or 0
+        if old_material and old_material.id != new_material.id:
+            old_material.current_stock = (old_material.current_stock or 0) - old_quantity
+            new_material.current_stock = (new_material.current_stock or 0) + new_quantity
+        else:
+            new_material.current_stock = (new_material.current_stock or 0) + (new_quantity - old_quantity)
         item.site_id = int(request.form["site_id"])
-        item.material_id = int(request.form["material_id"])
-        item.quantity = float(request.form.get("quantity") or 0)
+        item.material_id = new_material.id
+        item.unit = new_material.unit
+        item.quantity = new_quantity
         item.delivery_date = parse_date("delivery_date")
+        item.supplier_name = request.form.get("supplier_name")
+        item.notes = request.form.get("notes")
         commit_session()
         flash("Delivery updated", "success")
         return redirect(url_for("deliveries"))
@@ -630,6 +699,8 @@ def deliveries_edit(id):
 @login_required
 def deliveries_delete(id):
     item = SiteMaterial.query.get_or_404(id)
+    if item.material:
+        item.material.current_stock = (item.material.current_stock or 0) - item.quantity
     db.session.delete(item); commit_session()
     flash("Delivery deleted", "info")
     return redirect(url_for("deliveries"))
@@ -699,7 +770,8 @@ def workforce_new():
             role=request.form.get("role"),
             phone=request.form.get("phone"),
             assigned_site_id=int(request.form["assigned_site_id"]) if request.form.get("assigned_site_id") else None,
-            hired_date=parse_date("hired_date")
+            hired_date=parse_date("hired_date"),
+            status=request.form.get("status") or "Active"
         )
         db.session.add(w); commit_session()
         flash("Worker added", "success")
@@ -717,6 +789,7 @@ def workforce_edit(id):
         item.phone = request.form.get("phone")
         item.assigned_site_id = int(request.form["assigned_site_id"]) if request.form.get("assigned_site_id") else None
         item.hired_date = parse_date("hired_date")
+        item.status = request.form.get("status") or "Active"
         commit_session()
         flash("Worker updated", "success")
         return redirect(url_for("workforce"))
@@ -745,10 +818,11 @@ def tasks_new():
     if request.method == "POST":
         t = Task(
             site_id=int(request.form["site_id"]),
-            description=request.form["description"],
-            status=request.form.get("status") or "Open",
+            name=request.form["name"],
+            status=request.form.get("status") or "Pending",
             assigned_to=int(request.form["assigned_to"]) if request.form.get("assigned_to") else None,
-            deadline=parse_date("deadline")
+            start_date=parse_date("start_date"),
+            end_date=parse_date("end_date")
         )
         db.session.add(t); commit_session()
         flash("Task created", "success")
@@ -763,10 +837,11 @@ def tasks_edit(id):
     workers = Worker.query.all()
     if request.method == "POST":
         item.site_id = int(request.form["site_id"])
-        item.description = request.form["description"]
-        item.status = request.form.get("status") or "Open"
+        item.name = request.form["name"]
+        item.status = request.form.get("status") or "Pending"
         item.assigned_to = int(request.form["assigned_to"]) if request.form.get("assigned_to") else None
-        item.deadline = parse_date("deadline")
+        item.start_date = parse_date("start_date")
+        item.end_date = parse_date("end_date")
         commit_session()
         flash("Task updated", "success")
         return redirect(url_for("tasks"))
@@ -785,44 +860,40 @@ def tasks_delete(id):
 @login_required
 def expenses():
     items = Expense.query.order_by(Expense.date.desc()).all()
-    return render_template("expenses_list.html", items=items, sites=Site.query.all(), suppliers=Supplier.query.all())
+    return render_template("expenses_list.html", items=items, sites=Site.query.all())
 
 @app.route("/expenses/new", methods=["GET","POST"])
 @login_required
 def expenses_new():
     sites = Site.query.all()
-    suppliers = Supplier.query.all()
     if request.method == "POST":
         ex = Expense(
             site_id=int(request.form["site_id"]),
-            category=request.form["category"],
+            type=request.form["type"],
             amount=float(request.form.get("amount") or 0),
-            supplier_id=int(request.form["supplier_id"]) if request.form.get("supplier_id") else None,
             date=parse_date("date") or date.today(),
-            note=request.form.get("note")
+            description=request.form.get("description")
         )
         db.session.add(ex); commit_session()
         flash("Expense recorded", "success")
         return redirect(url_for("expenses"))
-    return render_template("expenses_form.html", item=None, sites=sites, suppliers=suppliers)
+    return render_template("expenses_form.html", item=None, sites=sites)
 
 @app.route("/expenses/<int:id>/edit", methods=["GET","POST"])
 @login_required
 def expenses_edit(id):
     item = Expense.query.get_or_404(id)
     sites = Site.query.all()
-    suppliers = Supplier.query.all()
     if request.method == "POST":
         item.site_id = int(request.form["site_id"])
-        item.category = request.form["category"]
+        item.type = request.form["type"]
         item.amount = float(request.form.get("amount") or 0)
-        item.supplier_id = int(request.form["supplier_id"]) if request.form.get("supplier_id") else None
         item.date = parse_date("date") or date.today()
-        item.note = request.form.get("note")
+        item.description = request.form.get("description")
         commit_session()
         flash("Expense updated", "success")
         return redirect(url_for("expenses"))
-    return render_template("expenses_form.html", item=item, sites=sites, suppliers=suppliers)
+    return render_template("expenses_form.html", item=item, sites=sites)
 
 @app.route("/expenses/<int:id>/delete", methods=["POST"])
 @login_required
@@ -834,15 +905,83 @@ def expenses_delete(id):
 
 # -------------------- DOCS & REPORTS --------------------
 @app.route("/documents")
-@login_required
 def documents():
-    docs = Document.query.order_by(Document.id.desc()).all()
-    return render_template("documents.html", docs=docs)
+    return render_template("documents.html")
+
+@app.route("/documents/new", methods=["GET","POST"])
+@login_required
+def documents_new():
+    sites = Site.query.all()
+    if request.method == "POST":
+        doc = Document(
+            name=request.form["name"],
+            type=request.form["type"],
+            site_id=int(request.form["site_id"]) if request.form.get("site_id") else None,
+            file_path=request.form.get("file_path"),
+            date=parse_date("date") or date.today()
+        )
+        db.session.add(doc); commit_session()
+        flash("Document added", "success")
+        return redirect(url_for("documents"))
+    return render_template("documents_form.html", item=None, sites=sites)
+
+@app.route("/documents/<int:id>/edit", methods=["GET","POST"])
+@login_required
+def documents_edit(id):
+    item = Document.query.get_or_404(id)
+    sites = Site.query.all()
+    if request.method == "POST":
+        item.name = request.form["name"]
+        item.type = request.form["type"]
+        item.site_id = int(request.form["site_id"]) if request.form.get("site_id") else None
+        item.file_path = request.form.get("file_path")
+        item.date = parse_date("date") or date.today()
+        commit_session()
+        flash("Document updated", "success")
+        return redirect(url_for("documents"))
+    return render_template("documents_form.html", item=item, sites=sites)
+
+@app.route("/documents/<int:id>/delete", methods=["POST"])
+@login_required
+def documents_delete(id):
+    item = Document.query.get_or_404(id)
+    db.session.delete(item); commit_session()
+    flash("Document deleted", "info")
+    return redirect(url_for("documents"))
 
 @app.route("/reports")
 @login_required
 def reports():
-    return render_template("reports.html")
+    # Get summary data
+    sites = Site.query.all()
+    summaries = []
+    for site in sites:
+        materials_count = sum(d.quantity for d in site.deliveries)
+        expenses_total = sum(e.amount for e in site.expenses)
+        workers_count = Worker.query.filter_by(assigned_site_id=site.id).count()
+        summaries.append({
+            'site': site,
+            'materials_delivered': materials_count,
+            'expenses_total': expenses_total,
+            'workers_count': workers_count
+        })
+    return render_template("reports.html", summaries=summaries)
+
+# -------------------- SUPPORT FILES --------------------
+@app.route("/favicon.ico")
+def favicon():
+    svg = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
+        '<rect width="16" height="16" fill="#0f766e"/>'
+        '<text x="8" y="11" font-family="Arial, sans-serif" font-size="10" fill="#ffffff" text-anchor="middle">S</text>'
+        '</svg>'
+    )
+    return Response(svg, mimetype="image/svg+xml")
+
+@app.route("/.well-known/appspecific/com.chrome.devtools.json")
+def chrome_devtools_manifest():
+    return {}, 200
 
 # -------------------- ERROR HANDLER --------------------
 @app.errorhandler(404)

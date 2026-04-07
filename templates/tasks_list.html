@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Task • SiteManager360{% endblock %}
+{% block title %}Tasks • SiteManager360{% endblock %}
 {% block content %}
-<h1>Task</h1>
+<h1>Tasks</h1>
 <div class="actions"><a class="btn" href="{{ url_for('tasks_new') }}">+ New</a></div>
 <table class="table">
-  <thead><tr><th>Site</th><th>Description</th><th>Status</th><th>Assigned To (optional)</th><th>Deadline</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Task Name</th><th>Site</th><th>Assigned Worker</th><th>Status</th><th>Actions</th></tr></thead>
   <tbody>
   {% for item in items %}
     <tr>
-      <td>{{ item.site.name if item.site else '' }}</td><td>{{ item.description }}</td><td>{{ item.status }}</td><td>{{ item.worker.name if item.worker else '' }}</td><td>{{ item.deadline.strftime('%Y-%m-%d') if item.deadline else '' }}</td>
+      <td>{{ item.name }}</td><td>{{ item.site.name if item.site else '' }}</td><td>{{ item.worker.name if item.worker else '' }}</td><td>{{ item.status }}</td>
       <td class="actions">
         <a class="btn" href="{{ url_for('tasks_edit', id=item.id) }}">Edit</a>
         {% if demo_mode %}
