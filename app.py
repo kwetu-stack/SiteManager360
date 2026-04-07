@@ -4,6 +4,7 @@ from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, session, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_sqlalchemy.session import Session as FlaskSQLAlchemySession
+from sqlalchemy import text
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -59,22 +60,6 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["DEBUG"] = False
 
 db = DemoSQLAlchemy(app)
-
-from sqlalchemy import text
-
-with app.app_context():
-    db.create_all()
-
-    def safe_add_column(query):
-        try:
-            with db.engine.connect() as conn:
-                conn.execute(text(query))
-                print("Migration applied:", query)
-        except Exception as e:
-            print("Migration skipped:", e)
-
-    # Ensure required columns exist
-    safe_add_column("ALTER TABLE material ADD COLUMN current_stock FLOAT DEFAULT 0")
 
 # -------------------- MODELS --------------------
 class Client(db.Model):
@@ -1012,30 +997,28 @@ def not_found(e):
 
 with app.app_context():
     db.create_all()
-    
-    # ================== SAFE MIGRATIONS ==================
-    from sqlalchemy import text
-    
+
     def safe_add_column(query):
-        """Add column safely - skips if column exists"""
         try:
             with db.engine.connect() as conn:
                 conn.execute(text(query))
                 conn.commit()
                 print("Migration applied:", query)
         except Exception as e:
-            print("Migration skipped:", str(e))
-    
+            print("Migration skipped:", e)
+
+    # FIXES
     # MATERIAL TABLE FIXES
     safe_add_column("ALTER TABLE material ADD COLUMN current_stock FLOAT DEFAULT 0")
-    
-    # PROJECT TABLE (example safety)
+
+    # PROJECT TABLE
     safe_add_column("ALTER TABLE project ADD COLUMN description TEXT")
-    
-    # SITE TABLE (example)
+    safe_add_column("ALTER TABLE project ADD COLUMN location TEXT")
+
+    # SITE TABLE
     safe_add_column("ALTER TABLE site ADD COLUMN location TEXT")
     # =====================================================
-    
+
     seed_data()
 
 # ------------------ RUN APP ------------------
