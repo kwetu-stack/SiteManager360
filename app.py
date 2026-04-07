@@ -1015,6 +1015,19 @@ def internal_error(e):
 with app.app_context():
     db.create_all()
 
+    def _sqlite_has_column(conn, table_name: str, column_name: str) -> bool:
+        try:
+            rows = conn.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+            return any((r[1] == column_name) for r in rows)  # r[1] = column name
+        except Exception:
+            return False
+
+    def _sqlite_busy_timeout(conn, ms: int = 8000) -> None:
+        try:
+            conn.execute(text(f"PRAGMA busy_timeout={int(ms)}"))
+        except Exception:
+            pass
+
     def safe_add_column(query):
         # Railway often runs multiple Gunicorn workers; on SQLite this can cause
         # "database is locked" during startup migrations. Retry a few times so
@@ -1024,6 +1037,8 @@ with app.app_context():
         for attempt in range(6):
             try:
                 with db.engine.connect() as conn:
+                    if conn.dialect.name == "sqlite":
+                        _sqlite_busy_timeout(conn)
                     conn.execute(text(query))
                     conn.commit()
                 print("Migration applied:", query)
@@ -1040,6 +1055,19 @@ with app.app_context():
     # FIXES / STARTUP MIGRATIONS
     # These keep older Railway SQLite DBs aligned with current models by
     # adding missing columns. (SQLite supports ADD COLUMN; failures are ignored.)
+
+    # Deterministic fix for Tasks page: some older Railway SQLite DBs have a
+    # task table without the "name" column; check via PRAGMA and add if missing.
+    try:
+        with db.engine.connect() as conn:
+            if conn.dialect.name == "sqlite":
+                _sqlite_busy_timeout(conn)
+                if not _sqlite_has_column(conn, "task", "name"):
+                    conn.execute(text("ALTER TABLE task ADD COLUMN name TEXT"))
+                    conn.commit()
+                    print("Migration applied: ALTER TABLE task ADD COLUMN name TEXT")
+    except Exception as e:
+        print("Migration skipped:", e)
 
     # CLIENT TABLE
     safe_add_column("ALTER TABLE client ADD COLUMN contact_person TEXT")
