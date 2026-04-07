@@ -373,7 +373,13 @@ def health():
 def dashboard():
     active_projects = db.session.scalar(db.select(db.func.count(Project.id)).where(Project.status == "Active")) or 0
     active_sites = db.session.scalar(db.select(db.func.count(Site.id)).where(Site.status == "Active")) or 0
-    materials_stock = db.session.scalar(db.select(db.func.sum(Material.current_stock))) or 0
+    
+    # Safe materials_stock query (handles missing column gracefully)
+    try:
+        materials_stock = db.session.scalar(db.select(db.func.sum(Material.current_stock))) or 0
+    except:
+        materials_stock = 0
+    
     total_expenses = db.session.scalar(db.select(db.func.sum(Expense.amount))) or 0
     return render_template("dashboard.html",
                            active_projects=active_projects,
@@ -991,14 +997,28 @@ def not_found(e):
 with app.app_context():
     db.create_all()
     
-    # Safe column migration
+    # ================== SAFE MIGRATIONS ==================
     from sqlalchemy import text
-    try:
-        with db.engine.connect() as conn:
-            conn.execute(text("ALTER TABLE material ADD COLUMN current_stock FLOAT DEFAULT 0"))
-            conn.commit()
-    except:
-        pass  # column already exists
+    
+    def safe_add_column(query):
+        """Add column safely - skips if column exists"""
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text(query))
+                conn.commit()
+                print("Migration applied:", query)
+        except Exception as e:
+            print("Migration skipped:", str(e))
+    
+    # MATERIAL TABLE FIXES
+    safe_add_column("ALTER TABLE material ADD COLUMN current_stock FLOAT DEFAULT 0")
+    
+    # PROJECT TABLE (example safety)
+    safe_add_column("ALTER TABLE project ADD COLUMN description TEXT")
+    
+    # SITE TABLE (example)
+    safe_add_column("ALTER TABLE site ADD COLUMN location TEXT")
+    # =====================================================
     
     seed_data()
 
