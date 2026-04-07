@@ -1024,39 +1024,91 @@ with app.app_context():
         except Exception as e:
             print("Migration skipped:", e)
 
-    # FIXES
-    # MATERIAL TABLE FIXES
-    safe_add_column("ALTER TABLE material ADD COLUMN current_stock FLOAT DEFAULT 0")
-    safe_add_column("ALTER TABLE material ADD COLUMN unit TEXT")
+    # FIXES / STARTUP MIGRATIONS
+    # These keep older Railway SQLite DBs aligned with current models by
+    # adding missing columns. (SQLite supports ADD COLUMN; failures are ignored.)
+
+    # CLIENT TABLE
+    safe_add_column("ALTER TABLE client ADD COLUMN contact_person TEXT")
+    safe_add_column("ALTER TABLE client ADD COLUMN phone TEXT")
+    safe_add_column("ALTER TABLE client ADD COLUMN email TEXT")
+    safe_add_column("ALTER TABLE client ADD COLUMN address TEXT")
+    safe_add_column("ALTER TABLE client ADD COLUMN created_at DATETIME")
 
     # PROJECT TABLE
-    safe_add_column("ALTER TABLE project ADD COLUMN description TEXT")
     safe_add_column("ALTER TABLE project ADD COLUMN location TEXT")
+    safe_add_column("ALTER TABLE project ADD COLUMN budget FLOAT DEFAULT 0")
+    safe_add_column("ALTER TABLE project ADD COLUMN start_date DATE")
+    safe_add_column("ALTER TABLE project ADD COLUMN end_date DATE")
+    safe_add_column("ALTER TABLE project ADD COLUMN status TEXT")
+    safe_add_column("ALTER TABLE project ADD COLUMN description TEXT")
+    safe_add_column("ALTER TABLE project ADD COLUMN created_at DATETIME")
 
     # SITE TABLE
-    safe_add_column("ALTER TABLE site ADD COLUMN location TEXT")
     safe_add_column("ALTER TABLE site ADD COLUMN project_id INTEGER")
+    safe_add_column("ALTER TABLE site ADD COLUMN name TEXT")
     safe_add_column("ALTER TABLE site ADD COLUMN type TEXT DEFAULT 'Block'")
+    safe_add_column("ALTER TABLE site ADD COLUMN location TEXT")
+    safe_add_column("ALTER TABLE site ADD COLUMN manager_id INTEGER")
+    safe_add_column("ALTER TABLE site ADD COLUMN start_date DATE")
+    safe_add_column("ALTER TABLE site ADD COLUMN end_date DATE")
+    safe_add_column("ALTER TABLE site ADD COLUMN status TEXT")
 
-    # DELIVERY TABLE
-    safe_add_column("ALTER TABLE delivery ADD COLUMN supplier TEXT")
-    safe_add_column("ALTER TABLE delivery ADD COLUMN site_id INTEGER")
+    # SUPPLIER TABLE
+    safe_add_column("ALTER TABLE supplier ADD COLUMN phone TEXT")
+    safe_add_column("ALTER TABLE supplier ADD COLUMN email TEXT")
+    safe_add_column("ALTER TABLE supplier ADD COLUMN category TEXT")
+    safe_add_column("ALTER TABLE supplier ADD COLUMN created_at DATETIME")
+
+    # MATERIAL TABLE
+    safe_add_column("ALTER TABLE material ADD COLUMN supplier_id INTEGER")
+    safe_add_column("ALTER TABLE material ADD COLUMN unit TEXT")
+    safe_add_column("ALTER TABLE material ADD COLUMN current_stock FLOAT DEFAULT 0")
+    safe_add_column("ALTER TABLE material ADD COLUMN reorder_level FLOAT")
+    safe_add_column("ALTER TABLE material ADD COLUMN cost_per_unit FLOAT DEFAULT 0")
+    safe_add_column("ALTER TABLE material ADD COLUMN created_at DATETIME")
+
+    # DELIVERIES TABLE (Model: SiteMaterial => table: site_material)
+    safe_add_column("ALTER TABLE site_material ADD COLUMN site_id INTEGER")
+    safe_add_column("ALTER TABLE site_material ADD COLUMN material_id INTEGER")
+    safe_add_column("ALTER TABLE site_material ADD COLUMN unit TEXT")
+    safe_add_column("ALTER TABLE site_material ADD COLUMN quantity FLOAT DEFAULT 0")
+    safe_add_column("ALTER TABLE site_material ADD COLUMN delivery_date DATE")
+    safe_add_column("ALTER TABLE site_material ADD COLUMN supplier_name TEXT")
+    safe_add_column("ALTER TABLE site_material ADD COLUMN notes TEXT")
+
+    # EQUIPMENT TABLE
+    safe_add_column("ALTER TABLE equipment ADD COLUMN type TEXT")
+    safe_add_column("ALTER TABLE equipment ADD COLUMN purchase_date DATE")
+    safe_add_column("ALTER TABLE equipment ADD COLUMN status TEXT")
+    safe_add_column("ALTER TABLE equipment ADD COLUMN assigned_site_id INTEGER")
+
+    # WORKER TABLE
+    safe_add_column("ALTER TABLE worker ADD COLUMN role TEXT")
+    safe_add_column("ALTER TABLE worker ADD COLUMN phone TEXT")
+    safe_add_column("ALTER TABLE worker ADD COLUMN assigned_site_id INTEGER")
+    safe_add_column("ALTER TABLE worker ADD COLUMN hired_date DATE")
+    safe_add_column("ALTER TABLE worker ADD COLUMN status TEXT DEFAULT 'Active'")
 
     # TASK TABLE
     safe_add_column("ALTER TABLE task ADD COLUMN site_id INTEGER")
     safe_add_column("ALTER TABLE task ADD COLUMN status TEXT")
+    safe_add_column("ALTER TABLE task ADD COLUMN assigned_to INTEGER")
+    safe_add_column("ALTER TABLE task ADD COLUMN start_date DATE")
+    safe_add_column("ALTER TABLE task ADD COLUMN end_date DATE")
+    safe_add_column("ALTER TABLE task ADD COLUMN created_at DATETIME")
 
     # EXPENSE TABLE
-    safe_add_column("ALTER TABLE expense ADD COLUMN category TEXT")
     safe_add_column("ALTER TABLE expense ADD COLUMN site_id INTEGER")
+    safe_add_column("ALTER TABLE expense ADD COLUMN type TEXT")
+    safe_add_column("ALTER TABLE expense ADD COLUMN amount FLOAT DEFAULT 0")
+    safe_add_column("ALTER TABLE expense ADD COLUMN date DATE")
+    safe_add_column("ALTER TABLE expense ADD COLUMN description TEXT")
 
-    # WORKFORCE TABLE
-    safe_add_column("ALTER TABLE workforce ADD COLUMN role TEXT")
-    safe_add_column("ALTER TABLE workforce ADD COLUMN site_id INTEGER")
-    # =====================================================
-
-    # WORKER TABLE (ensure columns exist for older DBs)
-    safe_add_column("ALTER TABLE worker ADD COLUMN status TEXT DEFAULT 'Active'")
+    # DOCUMENT TABLE
+    safe_add_column("ALTER TABLE document ADD COLUMN site_id INTEGER")
+    safe_add_column("ALTER TABLE document ADD COLUMN file_path TEXT")
+    safe_add_column("ALTER TABLE document ADD COLUMN date DATE")
 
     seed_data()
 
